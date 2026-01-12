@@ -250,3 +250,11 @@ func TestWorker_MultipleWorkersExecution(t *testing.T) {
 	}
 }
 
+
+
+func TestWorker_ContextCancelledEarly(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	testerObj := NewTester()
+	_ = testerObj.RunWorker(ctx, 100, "local", "http://127.0.0.1:9", "")
+}
