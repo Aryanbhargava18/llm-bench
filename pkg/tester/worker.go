@@ -352,3 +352,5 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 // TTFT histogram records time elapsed from request dispatch until the first token byte is received
 
 // Status code mapping sets error.type attribute to HTTP status string on non-200 responses
+
+// Context cancellation is monitored before every HTTP dispatch to avoid leaking worker threads
