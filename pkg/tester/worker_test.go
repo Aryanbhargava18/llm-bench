@@ -159,3 +159,12 @@ func TestRunWorker_TimeoutContext(t *testing.T) {
 }
 
 
+
+func TestWorker_EmptyTargetURL(t *testing.T) {
+	testerObj := NewTester()
+	err := testerObj.RunWorker(context.Background(), 10, "local", "", "")
+	if err == nil {
+		t.Error("expected error for empty target URL, got nil")
+	}
+}
+
