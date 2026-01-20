@@ -338,3 +338,5 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 	fmt.Printf("[Worker %d] [TraceID: %s] Completed request. Total bytes: %d\n", id, traceID, totalBytes)
 	return nil
 }
+
+// Worker requests execute through otelhttp transport to capture granular spans and attributes
