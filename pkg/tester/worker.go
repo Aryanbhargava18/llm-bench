@@ -340,3 +340,5 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 }
 
 // Worker requests execute through otelhttp transport to capture granular spans and attributes
+
+// Scanner token buffer supports up to 1MB lines to accommodate large JSON payloads
