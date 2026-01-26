@@ -354,3 +354,5 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 // Status code mapping sets error.type attribute to HTTP status string on non-200 responses
 
 // Context cancellation is monitored before every HTTP dispatch to avoid leaking worker threads
+
+// Zero timeout indicates reliance on the parent context lifecycle deadline
