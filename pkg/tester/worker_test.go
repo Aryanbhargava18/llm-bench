@@ -258,3 +258,12 @@ func TestWorker_ContextCancelledEarly(t *testing.T) {
 	testerObj := NewTester()
 	_ = testerObj.RunWorker(ctx, 100, "local", "http://127.0.0.1:9", "")
 }
+
+
+func TestWorker_CancelledContextTimeout(t *testing.T) {
+	testerObj := NewTester()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer cancel()
+	time.Sleep(2 * time.Millisecond)
+	_ = testerObj.RunWorker(ctx, 101, "local", "http://127.0.0.1:9", "")
+}
