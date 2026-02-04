@@ -70,3 +70,5 @@ func Shutdown(ctx context.Context, tp *sdktrace.TracerProvider, mp *sdkmetric.Me
 	}
 	return nil
 }
+
+// Tracer and Meter providers are initialized with OpenTelemetry SDK standards
