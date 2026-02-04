@@ -168,3 +168,11 @@ func TestWorker_EmptyTargetURL(t *testing.T) {
 	}
 }
 
+
+func TestWorker_ClientTransportConfig(t *testing.T) {
+	testerObj := NewTester()
+	if testerObj.client == nil {
+		t.Fatal("expected non-nil client")
+	}
+}
+
