@@ -56,3 +56,14 @@ func TestShutdown_NilProviders(t *testing.T) {
 		t.Errorf("expected no error for nil providers, got %v", err)
 	}
 }
+
+
+func TestTelemetry_ProviderDoubleInit(t *testing.T) {
+	tp1, mp1, err1 := InitProvider()
+	if err1 != nil {
+		t.Fatalf("first InitProvider failed: %v", err1)
+	}
+	if tp1 == nil || mp1 == nil {
+		t.Fatal("expected non-nil providers")
+	}
+}
