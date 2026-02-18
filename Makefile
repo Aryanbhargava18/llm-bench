@@ -1,4 +1,7 @@
-.PHONY: build run test lint clean
+.PHONY: help build run test lint clean
+
+help:
+	@echo "Targets: build, run, test, lint, clean"
 
 build:
 	go build -o bin/llm-bench cmd/llm-bench/main.go
