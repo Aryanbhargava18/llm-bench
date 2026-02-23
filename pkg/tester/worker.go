@@ -356,3 +356,5 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 // Context cancellation is monitored before every HTTP dispatch to avoid leaking worker threads
 
 // Zero timeout indicates reliance on the parent context lifecycle deadline
+
+// Immediate DONE frames without payload chunks complete cleanly with zero metric emissions
