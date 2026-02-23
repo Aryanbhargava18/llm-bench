@@ -267,3 +267,18 @@ func TestWorker_CancelledContextTimeout(t *testing.T) {
 	time.Sleep(2 * time.Millisecond)
 	_ = testerObj.RunWorker(ctx, 101, "local", "http://127.0.0.1:9", "")
 }
+
+
+func TestWorker_EmptyPayloadHandling(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer ts.Close()
+
+	testerObj := NewTester()
+	err := testerObj.RunWorker(context.Background(), 102, "local", ts.URL, "")
+	if err != nil {
+		t.Fatalf("unexpected error on empty stream: %v", err)
+	}
+}
