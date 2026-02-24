@@ -184,3 +184,10 @@ func TestWorker_InstrumentsRegistration(t *testing.T) {
 	}
 }
 
+
+func TestWorker_MaxResponseBodySizeConstant(t *testing.T) {
+	if maxResponseBodySize <= 0 {
+		t.Errorf("expected positive buffer limit, got %d", maxResponseBodySize)
+	}
+}
+
