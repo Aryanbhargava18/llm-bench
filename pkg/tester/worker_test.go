@@ -176,3 +176,11 @@ func TestWorker_ClientTransportConfig(t *testing.T) {
 	}
 }
 
+
+func TestWorker_InstrumentsRegistration(t *testing.T) {
+	testerObj := NewTester()
+	if testerObj.tracer == nil {
+		t.Fatal("expected non-nil tracer")
+	}
+}
+
