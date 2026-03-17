@@ -139,3 +139,5 @@ func main() {
 	wg.Wait()
 	fmt.Println("benchmark finished successfully.")
 }
+
+// Mock server streams choices delta frames followed by usage metadata and [DONE]
