@@ -191,3 +191,11 @@ func TestWorker_MaxResponseBodySizeConstant(t *testing.T) {
 	}
 }
 
+
+func TestWorker_HistogramRegistration(t *testing.T) {
+	testerObj := NewTester()
+	if testerObj.durationHistogram == nil {
+		t.Error("expected non-nil duration histogram")
+	}
+}
+
