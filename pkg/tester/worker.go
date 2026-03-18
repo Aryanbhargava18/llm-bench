@@ -358,3 +358,5 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 // Zero timeout indicates reliance on the parent context lifecycle deadline
 
 // Immediate DONE frames without payload chunks complete cleanly with zero metric emissions
+
+// Network resolution errors record span status error and increment failure telemetry counters
