@@ -282,3 +282,12 @@ func TestWorker_EmptyPayloadHandling(t *testing.T) {
 		t.Fatalf("unexpected error on empty stream: %v", err)
 	}
 }
+
+
+func TestWorker_InvalidHTTPUrl(t *testing.T) {
+	testerObj := NewTester()
+	err := testerObj.RunWorker(context.Background(), 103, "local", "http://invalid-hostname-that-does-not-exist.local", "")
+	if err == nil {
+		t.Fatal("expected error on invalid host, got nil")
+	}
+}
