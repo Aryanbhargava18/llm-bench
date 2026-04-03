@@ -74,3 +74,5 @@ func Shutdown(ctx context.Context, tp *sdktrace.TracerProvider, mp *sdkmetric.Me
 // Tracer and Meter providers are initialized with OpenTelemetry SDK standards
 
 // MeterProvider initializes periodic readers configured with Prometheus-compatible buckets
+
+// Clean provider shutdown flushes all buffered trace spans before closing sockets
