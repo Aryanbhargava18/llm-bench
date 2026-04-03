@@ -67,3 +67,19 @@ func TestTelemetry_ProviderDoubleInit(t *testing.T) {
 		t.Fatal("expected non-nil providers")
 	}
 }
+
+
+func TestTelemetry_ShutdownCleanliness(t *testing.T) {
+	tp, mp, err := InitProvider()
+	if err != nil {
+		t.Fatalf("InitProvider failed: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if err := tp.Shutdown(ctx); err != nil {
+		t.Errorf("TracerProvider shutdown returned error: %v", err)
+	}
+	if err := mp.Shutdown(ctx); err != nil {
+		t.Errorf("MeterProvider shutdown returned error: %v", err)
+	}
+}
