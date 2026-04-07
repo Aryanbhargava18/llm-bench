@@ -199,3 +199,11 @@ func TestWorker_HistogramRegistration(t *testing.T) {
 	}
 }
 
+
+func TestWorker_UsageCounterRegistration(t *testing.T) {
+	testerObj := NewTester()
+	if testerObj.usageCounter == nil {
+		t.Error("expected non-nil usage counter")
+	}
+}
+
