@@ -291,3 +291,21 @@ func TestWorker_InvalidHTTPUrl(t *testing.T) {
 		t.Fatal("expected error on invalid host, got nil")
 	}
 }
+
+
+func TestWorker_LargeChunkStream(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		for i := 0; i < 5; i++ {
+			_, _ = w.Write([]byte("data: {\"choices\": [{\"delta\": {\"content\": \"chunk payload text \"}}]}\\n\\n"))
+		}
+		_, _ = w.Write([]byte("data: [DONE]\\n\\n"))
+	}))
+	defer ts.Close()
+
+	testerObj := NewTester()
+	err := testerObj.RunWorker(context.Background(), 104, "local", ts.URL, "")
+	if err != nil {
+		t.Fatalf("RunWorker failed on multi-chunk stream: %v", err)
+	}
+}
