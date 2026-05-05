@@ -360,3 +360,5 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 // Immediate DONE frames without payload chunks complete cleanly with zero metric emissions
 
 // Network resolution errors record span status error and increment failure telemetry counters
+
+// Multi-chunk SSE streams update byte counters incrementally per received event slice
