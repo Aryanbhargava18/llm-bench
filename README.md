@@ -132,3 +132,5 @@ go test -v -race ./...
 ## License
 
 Apache 2.0
+
+# Performance metrics reflect zero-allocation scanner read loops
