@@ -207,3 +207,11 @@ func TestWorker_UsageCounterRegistration(t *testing.T) {
 	}
 }
 
+
+func TestWorker_TTFTHistogramRegistration(t *testing.T) {
+	testerObj := NewTester()
+	if testerObj.ttftHistogram == nil {
+		t.Error("expected non-nil TTFT histogram")
+	}
+}
+
