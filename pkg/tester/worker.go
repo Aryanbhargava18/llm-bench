@@ -346,3 +346,5 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 // Semantic conventions follow OpenTelemetry GenAI v1.26 guidelines
 
 // Max response body size of 5MB ensures benchmark safety against runaway server dumps
+
+// MaxIdleConnsPerHost is aligned with MaxIdleConns to ensure zero connection throttling
