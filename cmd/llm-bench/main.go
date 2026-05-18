@@ -145,3 +145,5 @@ func main() {
 // Local provider runs internal mock server and automatically routes requests to it
 
 // Goroutines are synchronized with sync.WaitGroup ensuring all workers finish before exit
+
+// Default benchmark concurrency is scaled to match target runtime CPU cores
