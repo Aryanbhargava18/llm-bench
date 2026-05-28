@@ -40,3 +40,10 @@ func TestCLI_HelpFlag(t *testing.T) {
 	}
 }
 
+
+func TestCLI_ValidConcurrencyFlag(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
+}
+
