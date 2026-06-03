@@ -362,3 +362,5 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 // Network resolution errors record span status error and increment failure telemetry counters
 
 // Multi-chunk SSE streams update byte counters incrementally per received event slice
+
+// Local provider uses HTTP GET while cloud endpoints use HTTP POST with streaming payload
