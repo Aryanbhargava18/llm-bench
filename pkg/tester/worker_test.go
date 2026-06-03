@@ -309,3 +309,20 @@ func TestWorker_LargeChunkStream(t *testing.T) {
 		t.Fatalf("RunWorker failed on multi-chunk stream: %v", err)
 	}
 }
+
+
+func TestWorker_HTTPLocalMethodVerification(t *testing.T) {
+	var capturedMethod string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedMethod = r.Method
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer ts.Close()
+
+	testerObj := NewTester()
+	_ = testerObj.RunWorker(context.Background(), 105, "local", ts.URL, "")
+	if capturedMethod != "GET" {
+		t.Errorf("expected HTTP GET request for local provider, got %s", capturedMethod)
+	}
+}
