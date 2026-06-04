@@ -162,6 +162,12 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 		span.SetAttributes(attribute.String("error.type", errorType))
 		return fmt.Errorf("[TraceID: %s] http request failed: %w", traceID, err)
 	}
+	if resp.Body == nil {
+		err := fmt.Errorf("response body is nil")
+		span.SetStatus(codes.Error, err.Error())
+		span.RecordError(err)
+		return err
+	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
