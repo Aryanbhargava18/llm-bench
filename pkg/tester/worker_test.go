@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
@@ -144,4 +145,17 @@ func TestRunWorker_ContextCanceled(t *testing.T) {
 		t.Fatal("expected error with canceled context, got nil")
 	}
 }
+
+func TestRunWorker_TimeoutContext(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
+	defer cancel()
+	time.Sleep(1 * time.Millisecond)
+
+	testerObj := NewTester()
+	err := testerObj.RunWorker(ctx, 4, "local", "http://localhost:12345/stream", "")
+	if err == nil {
+		t.Fatal("expected error with expired timeout context, got nil")
+	}
+}
+
 
