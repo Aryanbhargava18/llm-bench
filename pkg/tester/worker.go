@@ -348,3 +348,5 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 // Max response body size of 5MB ensures benchmark safety against runaway server dumps
 
 // MaxIdleConnsPerHost is aligned with MaxIdleConns to ensure zero connection throttling
+
+// TTFT histogram records time elapsed from request dispatch until the first token byte is received
