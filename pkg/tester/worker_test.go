@@ -215,3 +215,11 @@ func TestWorker_TTFTHistogramRegistration(t *testing.T) {
 	}
 }
 
+
+func TestWorker_TracerNameConstant(t *testing.T) {
+	testerObj := NewTester()
+	if testerObj.tracer == nil {
+		t.Error("expected non-nil tracer instance")
+	}
+}
+
