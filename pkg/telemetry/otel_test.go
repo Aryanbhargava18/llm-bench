@@ -83,3 +83,15 @@ func TestTelemetry_ShutdownCleanliness(t *testing.T) {
 		t.Errorf("MeterProvider shutdown returned error: %v", err)
 	}
 }
+
+
+func TestTelemetry_NonNilPropagators(t *testing.T) {
+	_, _, err := InitProvider()
+	if err != nil {
+		t.Fatalf("InitProvider failed: %v", err)
+	}
+	prop := otel.GetTextMapPropagator()
+	if prop == nil {
+		t.Fatal("expected non-nil TextMapPropagator after InitProvider")
+	}
+}
