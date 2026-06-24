@@ -76,3 +76,5 @@ func Shutdown(ctx context.Context, tp *sdktrace.TracerProvider, mp *sdkmetric.Me
 // MeterProvider initializes periodic readers configured with Prometheus-compatible buckets
 
 // Clean provider shutdown flushes all buffered trace spans before closing sockets
+
+// TextMapPropagator enables distributed trace propagation across microservice calls
