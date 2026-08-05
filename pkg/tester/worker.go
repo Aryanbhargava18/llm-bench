@@ -24,8 +24,11 @@ const maxResponseBodySize = 1024 * 1024 * 5 // 5MB limit for accumulation
 type Tester struct {
 	client            *http.Client
 	tracer            trace.Tracer
+	// usageCounter measures total token consumption (prompt and completion).
 	usageCounter      metric.Int64Counter
+	// durationHistogram records full end-to-end request latency in seconds.
 	durationHistogram metric.Float64Histogram
+	// ttftHistogram tracks time-to-first-token latency in seconds.
 	ttftHistogram     metric.Float64Histogram
 }
 
