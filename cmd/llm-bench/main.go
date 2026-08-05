@@ -126,6 +126,8 @@ func main() {
 			err := t.RunWorker(ctx, workerID, *provider, targetURL, apiKey)
 			if err != nil {
 				log.Printf("Worker %d failed: %v", workerID, err)
+			} else {
+				log.Printf("Worker %d completed", workerID)
 			}
 		}(i)
 	}
