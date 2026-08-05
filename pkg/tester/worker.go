@@ -41,6 +41,7 @@ func NewTester() *Tester {
 	// Properly clone DefaultTransport to preserve HTTP/2 multiplexing (ForceAttemptHTTP2: true)
 	// as well as crucial DialContext, TLSHandshakeTimeout, and IdleConnTimeout protections.
 	baseTransport := http.DefaultTransport.(*http.Transport).Clone()
+	// Allow up to 100 idle connections across all hosts and per host to support high concurrency benchmarks
 	baseTransport.MaxIdleConns = 100
 	baseTransport.MaxIdleConnsPerHost = 100
 	baseTransport.ResponseHeaderTimeout = 10 * time.Second // Protect against hung handshakes, but allow infinite stream duration
