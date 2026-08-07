@@ -16,4 +16,4 @@ lint:
 	golangci-lint run
 
 clean:
-	rm -rf bin/
+	rm -rf bin/ coverage.out
