@@ -87,6 +87,9 @@ Load testing streaming LLM endpoints presents two foundational systems challenge
 # Build binary
 make build
 
+# Run unit tests
+make test
+
 # 1. Benchmark local mock SSE server with 10 concurrent streams
 ./bin/llm-bench --provider=local --concurrency=10
 
