@@ -133,3 +133,15 @@ func TestRunWorker_ErrorMapping(t *testing.T) {
 		t.Error("missing or incorrect error.type attribute mapping")
 	}
 }
+
+func TestRunWorker_ContextCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel context immediately
+
+	testerObj := NewTester()
+	err := testerObj.RunWorker(ctx, 3, "local", "http://localhost:12345/stream", "")
+	if err == nil {
+		t.Fatal("expected error with canceled context, got nil")
+	}
+}
+
