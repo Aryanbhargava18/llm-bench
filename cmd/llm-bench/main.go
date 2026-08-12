@@ -81,14 +81,24 @@ func main() {
 	defer func() { _ = mp.Shutdown(context.Background()) }()
 
 	targetURL := "http://localhost:8080/stream"
+	var apiKey string
+
 	if *provider == "local" {
 		targetURL = fmt.Sprintf("http://localhost:%d/stream", *port)
 		go runMockServer(*port, *fail)
 		time.Sleep(200 * time.Millisecond) // wait for server
 	} else if *provider == "openai" {
-		targetURL = "https://api.openai.com/v1/chat/completions" // placeholder
+		targetURL = "https://api.openai.com/v1/chat/completions"
+		apiKey = os.Getenv("OPENAI_API_KEY")
+		if apiKey == "" {
+			log.Fatal("OPENAI_API_KEY environment variable is required for provider=openai")
+		}
 	} else if *provider == "anthropic" {
-		targetURL = "https://api.anthropic.com/v1/messages" // placeholder
+		targetURL = "https://api.anthropic.com/v1/messages"
+		apiKey = os.Getenv("ANTHROPIC_API_KEY")
+		if apiKey == "" {
+			log.Fatal("ANTHROPIC_API_KEY environment variable is required for provider=anthropic")
+		}
 	}
 
 	fmt.Printf("target: %s, concurrency: %d\n", targetURL, *concurrency)
@@ -100,7 +110,7 @@ func main() {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			err := t.RunWorker(ctx, workerID, *provider, targetURL)
+			err := t.RunWorker(ctx, workerID, *provider, targetURL, apiKey)
 			if err != nil {
 				log.Printf("Worker %d failed: %v", workerID, err)
 			}

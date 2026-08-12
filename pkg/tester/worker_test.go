@@ -29,7 +29,7 @@ func TestRunWorker_Success(t *testing.T) {
 
 	// 3. Run worker
 	testerObj := NewTester()
-	err := testerObj.RunWorker(context.Background(), 1, "test-provider", ts.URL)
+	err := testerObj.RunWorker(context.Background(), 1, "local", ts.URL, "")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -81,7 +81,7 @@ func TestRunWorker_ErrorMapping(t *testing.T) {
 	defer ts.Close()
 
 	testerObj := NewTester()
-	err := testerObj.RunWorker(context.Background(), 2, "test-provider", ts.URL)
+	err := testerObj.RunWorker(context.Background(), 2, "local", ts.URL, "")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}

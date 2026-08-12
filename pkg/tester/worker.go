@@ -2,6 +2,7 @@ package tester
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -46,7 +47,7 @@ func NewTester() *Tester {
 	}
 }
 
-func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetURL string) error {
+func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetURL string, apiKey string) error {
 	ctx, span := t.tracer.Start(ctx, "llm.stream_request")
 	defer span.End()
 
@@ -57,7 +58,48 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 
 	fmt.Printf("[Worker %d] Starting request to %s...\n", id, targetURL)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", targetURL, nil)
+	var req *http.Request
+	var err error
+
+	if provider == "local" {
+		req, err = http.NewRequestWithContext(ctx, "GET", targetURL, nil)
+	} else if provider == "openai" {
+		payload := map[string]interface{}{
+			"model": "gpt-4o-mini",
+			"messages": []map[string]string{
+				{"role": "user", "content": "Say hello"},
+			},
+			"stream": true,
+			"stream_options": map[string]bool{
+				"include_usage": true,
+			},
+		}
+		bodyBytes, _ := json.Marshal(payload)
+		req, err = http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(bodyBytes))
+		if err == nil {
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+apiKey)
+		}
+	} else if provider == "anthropic" {
+		payload := map[string]interface{}{
+			"model": "claude-3-haiku-20240307",
+			"messages": []map[string]string{
+				{"role": "user", "content": "Say hello"},
+			},
+			"max_tokens": 1024,
+			"stream": true,
+		}
+		bodyBytes, _ := json.Marshal(payload)
+		req, err = http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(bodyBytes))
+		if err == nil {
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("x-api-key", apiKey)
+			req.Header.Set("anthropic-version", "2023-06-01")
+		}
+	} else {
+		return fmt.Errorf("unknown provider: %s", provider)
+	}
+
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
