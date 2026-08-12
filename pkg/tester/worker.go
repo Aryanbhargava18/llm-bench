@@ -1,22 +1,44 @@
 package tester
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
 func RunWorker(id int, provider string) error {
 	fmt.Printf("[Worker %d] Starting request to %s...\n", id, provider)
 	
-	// Simulate HTTP request to LLM provider
 	client := &http.Client{Timeout: 30 * time.Second}
 	
-	// We will implement the actual API calls in the next iteration.
-	// For now, this just proves the worker scaffold is correct.
-	_ = client
+	// Simulated streaming response for load testing
+	mockResponse := "data: {\"choices\": [{\"delta\": {\"content\": \"Hello\"}}]}\n\ndata: {\"choices\": [{\"delta\": {\"content\": \" World\"}}]}\n\ndata: [DONE]\n\n"
+	resp := &http.Response{
+		StatusCode: 200,
+		Body:       http.NoBody,
+	}
 	
-	time.Sleep(1 * time.Second)
+	if resp.StatusCode == 200 {
+		scanner := bufio.NewScanner(bytes.NewReader([]byte(mockResponse)))
+		var ttft time.Duration
+		startTime := time.Now()
+		firstChunk := true
+
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.HasPrefix(line, "data:") {
+				if firstChunk && line != "data: [DONE]" {
+					ttft = time.Since(startTime)
+					firstChunk = false
+					fmt.Printf("[Worker %d] TTFT: %v\n", id, ttft)
+				}
+			}
+		}
+	}
+	
 	fmt.Printf("[Worker %d] Completed request\n", id)
 	return nil
 }
