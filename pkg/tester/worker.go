@@ -3,18 +3,30 @@ package tester
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func RunWorker(id int, provider string) error {
+	ctx := context.Background()
+	tracer := otel.Tracer("ttft-bench")
+	
+	ctx, span := tracer.Start(ctx, "llm.stream_request")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("gen_ai.system", provider),
+		attribute.String("gen_ai.request.model", "dummy-model"),
+	)
+
 	fmt.Printf("[Worker %d] Starting request to %s...\n", id, provider)
 	
-	client := &http.Client{Timeout: 30 * time.Second}
-	
-	// Simulated streaming response for load testing
 	mockResponse := "data: {\"choices\": [{\"delta\": {\"content\": \"Hello\"}}]}\n\ndata: {\"choices\": [{\"delta\": {\"content\": \" World\"}}]}\n\ndata: [DONE]\n\n"
 	resp := &http.Response{
 		StatusCode: 200,
@@ -33,6 +45,8 @@ func RunWorker(id int, provider string) error {
 				if firstChunk && line != "data: [DONE]" {
 					ttft = time.Since(startTime)
 					firstChunk = false
+					
+					span.SetAttributes(attribute.Float64("gen_ai.response.ttft_ms", float64(ttft.Milliseconds())))
 					fmt.Printf("[Worker %d] TTFT: %v\n", id, ttft)
 				}
 			}
