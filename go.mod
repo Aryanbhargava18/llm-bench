@@ -1,4 +1,4 @@
-module github.com/Aryanbhargava18/ttft-bench-go
+module github.com/Aryanbhargava18/llm-bench
 
 go 1.26.5
 

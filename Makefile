@@ -1,10 +1,10 @@
 .PHONY: build run clean
 
 build:
-	go build -o bin/ttft-bench cmd/ttft-bench/main.go
+	go build -o bin/llm-bench cmd/llm-bench/main.go
 
 run: build
-	./bin/ttft-bench
+	./bin/llm-bench
 
 clean:
 	rm -rf bin/

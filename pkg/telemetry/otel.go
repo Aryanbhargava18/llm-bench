@@ -17,7 +17,7 @@ func InitProvider() (*sdktrace.TracerProvider, error) {
 	
 	res := resource.NewWithAttributes(
 		semconv.SchemaURL,
-		semconv.ServiceName("ttft-bench-go"),
+		semconv.ServiceName("llm-bench"),
 	)
 	
 	tp := sdktrace.NewTracerProvider(

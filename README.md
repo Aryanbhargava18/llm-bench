@@ -1,10 +1,10 @@
-# ttft-bench-go
+# llm-bench
 
 A concurrent Go CLI tool for benchmarking Time-To-First-Token (TTFT) latency across streaming LLM API endpoints. Parses Server-Sent Events (SSE) in real-time and emits OpenTelemetry `gen_ai.*` traces for observability.
 
 ## Overview
 
-`ttft-bench` fires concurrent requests against streaming LLM providers, parses the SSE stream byte-by-byte, and measures the precise time between request dispatch and the first meaningful token arrival. All measurements are emitted as OpenTelemetry spans following the [`gen_ai.*` semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/).
+`llm-bench` fires concurrent requests against streaming LLM providers, parses the SSE stream byte-by-byte, and measures the precise time between request dispatch and the first meaningful token arrival. All measurements are emitted as OpenTelemetry spans following the [`gen_ai.*` semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/).
 
 ## Features
 
@@ -17,7 +17,7 @@ A concurrent Go CLI tool for benchmarking Time-To-First-Token (TTFT) latency acr
 ## Architecture
 
 ```
-cmd/ttft-bench/
+cmd/llm-bench/
   main.go              # CLI entry point, OTel SDK initialization
 pkg/
   telemetry/
@@ -33,10 +33,10 @@ pkg/
 make build
 
 # Run benchmark against a provider
-./bin/ttft-bench --provider=anthropic --concurrency=5
+./bin/llm-bench --provider=anthropic --concurrency=5
 
 # Export traces to Jaeger
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 ./bin/ttft-bench --provider=openai --concurrency=10
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 ./bin/llm-bench --provider=openai --concurrency=10
 ```
 
 ## Trace Output

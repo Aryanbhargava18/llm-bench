@@ -15,7 +15,7 @@ import (
 
 func RunWorker(id int, provider string) error {
 	ctx := context.Background()
-	tracer := otel.Tracer("ttft-bench")
+	tracer := otel.Tracer("llm-bench")
 	
 	ctx, span := tracer.Start(ctx, "llm.stream_request")
 	defer span.End()
