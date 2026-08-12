@@ -1,59 +1,41 @@
 # llm-bench
 
-A concurrent Go CLI tool for benchmarking Time-To-First-Token (TTFT) latency across streaming LLM API endpoints. Parses Server-Sent Events (SSE) in real-time and emits OpenTelemetry `gen_ai.*` traces for observability.
+A sandbox tool to validate OpenTelemetry `gen_ai.*` attribute semantics and bounded SSE streaming behavior before contributing to OpenTelemetry instrumentation upstream.
 
-## Overview
+## Why this exists
 
-`llm-bench` fires concurrent requests against streaming LLM providers, parses the SSE stream byte-by-byte, and measures the precise time between request dispatch and the first meaningful token arrival. All measurements are emitted as OpenTelemetry spans following the [`gen_ai.*` semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/).
+When instrumenting GenAI SDKs (like `openai-go` or `anthropic-sdk-go`), Server-Sent Events (SSE) streams can grow indefinitely during long completions. Accumulating these in a single string can cause OOM panics. 
 
-## Features
+Additionally, we need to ensure correct `gen_ai.*` attributes (like `gen_ai.system`, `gen_ai.request.model`, and `gen_ai.response.ttft_ms`) are emitted consistently across both standard and streaming response paths.
 
-- **Concurrent load testing** — configurable worker pool for parallel request dispatch
-- **SSE stream parsing** — real-time chunked parsing of `text/event-stream` responses
-- **OpenTelemetry instrumentation** — emits `gen_ai.system`, `gen_ai.request.model`, and `gen_ai.response.ttft_ms` span attributes
-- **Multi-provider support** — pluggable provider interface for OpenAI, Anthropic, Gemini, and custom endpoints
-- **Context propagation** — manual span context management for accurate distributed trace correlation
+`llm-bench` isolates these problems outside of the complex `otelc` compile-time toolchain. It spins up a local mock SSE server, fires concurrent HTTP requests, parses the stream with explicit memory bounds (truncated via `strings.Builder`), and emits OpenTelemetry traces **and metrics**.
 
-## Architecture
+> **Note on Naming:** This repository was originally built as a naive latency benchmarker (hence `llm-bench`). It has since been entirely repurposed and rebuilt as a specialized sandbox to validate OpenTelemetry GenAI semantic conventions in a controlled environment.
 
-```
-cmd/llm-bench/
-  main.go              # CLI entry point, OTel SDK initialization
-pkg/
-  telemetry/
-    otel.go            # TracerProvider setup, stdout/OTLP exporter config
-  tester/
-    worker.go          # Concurrent worker pool, SSE parsing, span emission
-```
+## Testing Methodology
+
+To prove semantic compliance programmatically, `llm-bench` uses `go.opentelemetry.io/otel/sdk/trace/tracetest`. The `worker_test.go` suite spins up in-memory `httptest` servers to stream mocked responses, capturing the emitted spans via `tracetest.InMemoryExporter`. 
+
+This guarantees that memory truncation limits are respected and that all emitted attributes (like `gen_ai.response.ttft_ms` and `error.type`) strictly adhere to OTel conventions—solving the "testability and data quality" challenges often encountered in upstream GenAI adapters.
 
 ## Usage
 
 ```bash
-# Build
 make build
-
-# Run benchmark against a provider
-./bin/llm-bench --provider=anthropic --concurrency=5
-
-# Export traces to Jaeger
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 ./bin/llm-bench --provider=openai --concurrency=10
+./bin/llm-bench --provider=local --concurrency=5
 ```
 
-## Trace Output
+This uses the local test server by default so it works out-of-the-box without requiring API keys.
 
-Each benchmark run emits spans with the following attributes:
+## What it actually does
 
-| Attribute | Description |
-|-----------|-------------|
-| `gen_ai.system` | Provider name (e.g., `openai`, `anthropic`) |
-| `gen_ai.request.model` | Model identifier |
-| `gen_ai.response.ttft_ms` | Time-To-First-Token in milliseconds |
+- Makes real HTTP requests and parses `text/event-stream` chunks over the network.
+- Uses explicit length truncation (`maxResponseBodySize`) during string accumulation to prevent OOM panics.
+- Continues parsing the stream after content truncation to intercept trailing usage metrics, mirroring the exact architectural constraint of upstream OTel streaming instrumentation.
+- Emits standard `error.type` attributes upon HTTP failures, mapping transport errors to semantic conventions.
+- Records OTel Metrics natively, initializing a `MeterProvider` to capture `gen_ai.client.token.usage` (Counters) and `gen_ai.client.operation.duration` (Histograms).
+- Injects `traceparent` context into HTTP headers using `propagation.TraceContext`.
+- Accurately measures Time-To-First-Token from HTTP dispatch to the first `data:` chunk parsed from the network buffer.
 
 ## Requirements
-
 - Go 1.21+
-- Valid API keys for target providers (set via environment variables)
-
-## License
-
-Apache-2.0
