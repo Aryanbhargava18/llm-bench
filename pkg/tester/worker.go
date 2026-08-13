@@ -122,10 +122,12 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 	// Track dispatch time for operation duration and TTFT
 	dispatchTime := time.Now()
 	
-	// Ensure total operation duration is recorded correctly per OTel spec
+	// Ensure total operation duration is recorded correctly per OTel spec.
+	// Use context.Background() explicitly: ctx may be cancelled (e.g. SIGINT) by the
+	// time this defer runs, but we still want the final measurement recorded.
 	defer func() {
 		duration := time.Since(dispatchTime)
-		t.durationHistogram.Record(ctx, float64(duration.Milliseconds()), metric.WithAttributes(
+		t.durationHistogram.Record(context.Background(), float64(duration.Milliseconds()), metric.WithAttributes(
 			attribute.String("gen_ai.system", provider),
 		))
 	}()
@@ -151,6 +153,10 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
+	// Extend the scanner's max token size beyond the default 64KB.
+	// OpenAI structured outputs can produce single SSE lines exceeding 64KB;
+	// without this, scanner.Scan() returns false and Err() == bufio.ErrTooLong.
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024) // up to 1MB per line
 	var ttft time.Duration
 	firstChunk := true
 

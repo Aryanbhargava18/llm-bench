@@ -14,6 +14,9 @@ import (
 
 func TestRunWorker_Success(t *testing.T) {
 	// 1. Setup OTel InMemory Exporter for validation
+	originalTP := otel.GetTracerProvider()
+	t.Cleanup(func() { otel.SetTracerProvider(originalTP) })
+
 	exporter := tracetest.NewInMemoryExporter()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
 	otel.SetTracerProvider(tp)
@@ -71,6 +74,9 @@ func TestRunWorker_Success(t *testing.T) {
 }
 
 func TestRunWorker_ErrorMapping(t *testing.T) {
+	originalTP := otel.GetTracerProvider()
+	t.Cleanup(func() { otel.SetTracerProvider(originalTP) })
+
 	exporter := tracetest.NewInMemoryExporter()
 	tp := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
 	otel.SetTracerProvider(tp)
