@@ -26,12 +26,14 @@ type Tester struct {
 	tracer            trace.Tracer
 	usageCounter      metric.Int64Counter
 	durationHistogram metric.Float64Histogram
+	ttftHistogram     metric.Float64Histogram
 }
 
 func NewTester() *Tester {
 	meter := otel.Meter("llm-bench")
 	usageCounter, _ := meter.Int64Counter("gen_ai.client.token.usage")
 	durationHistogram, _ := meter.Float64Histogram("gen_ai.client.operation.duration")
+	ttftHistogram, _ := meter.Float64Histogram("gen_ai.client.token.time_to_first")
 
 	return &Tester{
 		client: &http.Client{
@@ -44,6 +46,7 @@ func NewTester() *Tester {
 		tracer:            otel.Tracer("llm-bench"),
 		usageCounter:      usageCounter,
 		durationHistogram: durationHistogram,
+		ttftHistogram:     ttftHistogram,
 	}
 }
 
@@ -54,6 +57,7 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 	// Model name is populated below when building the request payload
 	span.SetAttributes(
 		attribute.String("gen_ai.system", provider),
+		attribute.Bool("gen_ai.stream", true),
 	)
 
 	fmt.Printf("[Worker %d] Starting request to %s...\n", id, targetURL)
@@ -172,8 +176,12 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 				ttft = time.Since(dispatchTime)
 				firstChunk = false
 				
-				// record ttft_ms metric in trace (not the histogram, which is for total duration)
+				// record ttft metric in trace
 				span.SetAttributes(attribute.Float64("gen_ai.response.ttft_ms", float64(ttft.Milliseconds())))
+				// record ttft in histogram
+				t.ttftHistogram.Record(ctx, float64(ttft.Milliseconds()), metric.WithAttributes(
+					attribute.String("gen_ai.system", provider),
+				))
 				fmt.Printf("[Worker %d] TTFT: %v\n", id, ttft)
 			}
 			
@@ -220,6 +228,9 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 	}
 
 	if err := scanner.Err(); err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		span.RecordError(err)
+		span.SetAttributes(attribute.String("error.type", "stream_error"))
 		return fmt.Errorf("error reading stream: %w", err)
 	}
 
