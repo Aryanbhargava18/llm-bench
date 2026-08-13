@@ -51,21 +51,24 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 	ctx, span := t.tracer.Start(ctx, "llm.stream_request")
 	defer span.End()
 
+	// Model name is populated below when building the request payload
 	span.SetAttributes(
 		attribute.String("gen_ai.system", provider),
-		attribute.String("gen_ai.request.model", "dummy-model"),
 	)
 
 	fmt.Printf("[Worker %d] Starting request to %s...\n", id, targetURL)
 
 	var req *http.Request
 	var err error
+	var modelName string
 
 	if provider == "local" {
+		modelName = "dummy-model"
 		req, err = http.NewRequestWithContext(ctx, "GET", targetURL, nil)
 	} else if provider == "openai" {
+		modelName = "gpt-4o-mini"
 		payload := map[string]interface{}{
-			"model": "gpt-4o-mini",
+			"model": modelName,
 			"messages": []map[string]string{
 				{"role": "user", "content": "Say hello"},
 			},
@@ -81,8 +84,9 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 			req.Header.Set("Authorization", "Bearer "+apiKey)
 		}
 	} else if provider == "anthropic" {
+		modelName = "claude-3-haiku-20240307"
 		payload := map[string]interface{}{
-			"model": "claude-3-haiku-20240307",
+			"model": modelName,
 			"messages": []map[string]string{
 				{"role": "user", "content": "Say hello"},
 			},
@@ -106,6 +110,9 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 
 	// Propagate trace context into HTTP headers
 	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
+
+	// Record dynamic model name
+	span.SetAttributes(attribute.String("gen_ai.request.model", modelName))
 
 	// Track dispatch time for operation duration and TTFT
 	dispatchTime := time.Now()
@@ -176,20 +183,33 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 					Usage struct {
 						PromptTokens     int `json:"prompt_tokens"`
 						CompletionTokens int `json:"completion_tokens"`
+						InputTokens      int `json:"input_tokens"`
+						OutputTokens     int `json:"output_tokens"`
 					} `json:"usage"`
 				}
 				jsonStr := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 				if err := json.Unmarshal([]byte(jsonStr), &payload); err == nil {
-					if payload.Usage.PromptTokens > 0 {
-						span.SetAttributes(attribute.Int("gen_ai.usage.prompt_tokens", payload.Usage.PromptTokens))
-						t.usageCounter.Add(ctx, int64(payload.Usage.PromptTokens), metric.WithAttributes(
+					
+					promptTokens := payload.Usage.PromptTokens
+					if promptTokens == 0 {
+						promptTokens = payload.Usage.InputTokens
+					}
+					
+					completionTokens := payload.Usage.CompletionTokens
+					if completionTokens == 0 {
+						completionTokens = payload.Usage.OutputTokens
+					}
+
+					if promptTokens > 0 {
+						span.SetAttributes(attribute.Int("gen_ai.usage.prompt_tokens", promptTokens))
+						t.usageCounter.Add(ctx, int64(promptTokens), metric.WithAttributes(
 							attribute.String("gen_ai.system", provider),
 							attribute.String("gen_ai.token.type", "prompt"),
 						))
 					}
-					if payload.Usage.CompletionTokens > 0 {
-						span.SetAttributes(attribute.Int("gen_ai.usage.completion_tokens", payload.Usage.CompletionTokens))
-						t.usageCounter.Add(ctx, int64(payload.Usage.CompletionTokens), metric.WithAttributes(
+					if completionTokens > 0 {
+						span.SetAttributes(attribute.Int("gen_ai.usage.completion_tokens", completionTokens))
+						t.usageCounter.Add(ctx, int64(completionTokens), metric.WithAttributes(
 							attribute.String("gen_ai.system", provider),
 							attribute.String("gen_ai.token.type", "completion"),
 						))
