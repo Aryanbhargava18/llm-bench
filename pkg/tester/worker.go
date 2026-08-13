@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -82,7 +81,10 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 				"include_usage": true,
 			},
 		}
-		bodyBytes, _ := json.Marshal(payload)
+		bodyBytes, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("failed to marshal openai request payload: %w", err)
+		}
 		req, err = http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(bodyBytes))
 		if err == nil {
 			req.Header.Set("Content-Type", "application/json")
@@ -98,7 +100,10 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 			"max_tokens": 1024,
 			"stream": true,
 		}
-		bodyBytes, _ := json.Marshal(payload)
+		bodyBytes, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("failed to marshal anthropic request payload: %w", err)
+		}
 		req, err = http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(bodyBytes))
 		if err == nil {
 			req.Header.Set("Content-Type", "application/json")
@@ -160,8 +165,7 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 	var ttft time.Duration
 	firstChunk := true
 
-	// bounded accumulation to prevent OOM
-	var sb strings.Builder
+	// Track byte count for throughput logging; never accumulate content in memory.
 	var totalBytes int
 	var truncated bool
 
@@ -177,8 +181,6 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 		
 		if !truncated {
 			totalBytes += lineLen
-			sb.Write(lineBytes)
-			sb.WriteString("\n")
 		}
 
 		if bytes.HasPrefix(lineBytes, []byte("data:")) {

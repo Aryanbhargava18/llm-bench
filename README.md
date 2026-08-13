@@ -13,7 +13,7 @@ Benchmarking streaming LLM responses at high concurrency often leads to two prob
 ## Features
 
 - **High Concurrency HTTP:** Utilizes a custom `http.Transport` optimized for massive parallel connections.
-- **Graceful Degradation:** Safely truncates response accumulation at 5MB to prevent memory exhaustion, while continuing to parse the stream to intercept trailing usage payloads.
+- **Zero-Copy Stream Parsing:** Never accumulates SSE content in memory. Tracks byte throughput with a running counter while parsing each line from the scanner's internal buffer, then discards it. Trailing usage frames are intercepted without holding any prior content in RAM.
 - **Provider Agnostic:** Normalizes divergent usage schemas from OpenAI (`prompt_tokens`) and Anthropic (`input_tokens`).
 - **Native OpenTelemetry:** Emits OTel Traces and Metrics natively. Measures `gen_ai.response.ttft_ms` and `gen_ai.client.token.usage` using exact GenAI semantic conventions.
 - **Graceful Shutdown:** Native SIGINT listening ensures running workers and OpenTelemetry Providers gracefully flush telemetry on cancellation.
