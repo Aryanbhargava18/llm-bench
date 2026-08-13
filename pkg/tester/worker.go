@@ -38,10 +38,10 @@ func NewTester() *Tester {
 
 	return &Tester{
 		client: &http.Client{
-			Timeout: 30 * time.Second,
 			Transport: &http.Transport{
-				MaxIdleConns:        100,
-				MaxIdleConnsPerHost: 100, // crucial for high concurrency benchmarking
+				MaxIdleConns:          100,
+				MaxIdleConnsPerHost:   100,
+				ResponseHeaderTimeout: 10 * time.Second, // Protect against hung handshakes, but allow infinite stream duration
 			},
 		},
 		tracer:            otel.Tracer("llm-bench"),

@@ -28,7 +28,10 @@ func InitProvider() (*sdktrace.TracerProvider, *sdkmetric.MeterProvider, error) 
 		sdktrace.WithResource(res),
 	)
 	otel.SetTracerProvider(tp)
-	otel.SetTextMapPropagator(propagation.TraceContext{})
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	))
 
 	// 2. Setup Metrics
 	metricExp, err := stdoutmetric.New()

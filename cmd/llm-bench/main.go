@@ -77,8 +77,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to initialize otel provider: %v", err)
 	}
-	defer func() { _ = tp.Shutdown(context.Background()) }()
-	defer func() { _ = mp.Shutdown(context.Background()) }()
+	defer func() {
+		shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancelShutdown()
+		_ = tp.Shutdown(shutdownCtx)
+	}()
+	defer func() {
+		shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancelShutdown()
+		_ = mp.Shutdown(shutdownCtx)
+	}()
 
 	targetURL := "http://localhost:8080/stream"
 	var apiKey string
