@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -139,6 +140,9 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		// Drain the body to prevent TCP connection Keep-Alive teardown
+		_, _ = io.Copy(io.Discard, resp.Body)
+		
 		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
@@ -156,23 +160,23 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 	var truncated bool
 
 	for scanner.Scan() {
-		line := scanner.Text()
+		lineBytes := scanner.Bytes() // zero-allocation byte slice
+		lineLen := len(lineBytes)
 		
 		// enforce memory bounds for content, but continue scanning for trailing usage metrics
-		lineBytes := len(line)
-		if !truncated && totalBytes+lineBytes > maxResponseBodySize {
+		if !truncated && totalBytes+lineLen > maxResponseBodySize {
 			fmt.Printf("[Worker %d] stream exceeded %d bytes, truncating content accumulation\n", id, maxResponseBodySize)
 			truncated = true
 		}
 		
 		if !truncated {
-			totalBytes += lineBytes
-			sb.WriteString(line)
+			totalBytes += lineLen
+			sb.Write(lineBytes)
 			sb.WriteString("\n")
 		}
 
-		if strings.HasPrefix(line, "data:") {
-			if firstChunk && line != "data: [DONE]" {
+		if bytes.HasPrefix(lineBytes, []byte("data:")) {
+			if firstChunk && !bytes.Equal(lineBytes, []byte("data: [DONE]")) {
 				ttft = time.Since(dispatchTime)
 				firstChunk = false
 				
@@ -186,7 +190,7 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 			}
 			
 			// extract usage metrics if present (typically in the final chunk)
-			if strings.Contains(line, "\"usage\"") {
+			if bytes.Contains(lineBytes, []byte("\"usage\"")) {
 				var payload struct {
 					Usage struct {
 						PromptTokens     int `json:"prompt_tokens"`
@@ -195,8 +199,8 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 						OutputTokens     int `json:"output_tokens"`
 					} `json:"usage"`
 				}
-				jsonStr := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-				if err := json.Unmarshal([]byte(jsonStr), &payload); err == nil {
+				jsonStr := bytes.TrimSpace(bytes.TrimPrefix(lineBytes, []byte("data:")))
+				if err := json.Unmarshal(jsonStr, &payload); err == nil {
 					
 					promptTokens := payload.Usage.PromptTokens
 					if promptTokens == 0 {
