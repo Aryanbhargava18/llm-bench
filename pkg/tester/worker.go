@@ -180,6 +180,10 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 	// Track byte count for throughput logging; never accumulate content in memory.
 	var totalBytes int
 	var truncated bool
+	
+	// Track maximum cumulative token counts to prevent double-counting across multiple SSE chunks
+	var finalPromptTokens int
+	var finalCompletionTokens int
 
 	for scanner.Scan() {
 		lineBytes := scanner.Bytes() // zero-allocation byte slice
@@ -210,7 +214,7 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 				fmt.Printf("[Worker %d] [TraceID: %s] TTFT: %v\n", id, traceID, ttft)
 			}
 			
-			// extract usage metrics if present (typically in the final chunk)
+			// extract usage metrics if present (typically in the final chunk or message_start)
 			if bytes.Contains(lineBytes, []byte("\"usage\"")) {
 				var payload struct {
 					Usage struct {
@@ -219,35 +223,32 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 						InputTokens      int `json:"input_tokens"`
 						OutputTokens     int `json:"output_tokens"`
 					} `json:"usage"`
+					Message struct {
+						Usage struct {
+							InputTokens  int `json:"input_tokens"`
+							OutputTokens int `json:"output_tokens"`
+						} `json:"usage"`
+					} `json:"message"`
 				}
 				jsonStr := bytes.TrimSpace(bytes.TrimPrefix(lineBytes, []byte("data:")))
 				if err := json.Unmarshal(jsonStr, &payload); err == nil {
-					
-					promptTokens := payload.Usage.PromptTokens
-					if promptTokens == 0 {
-						promptTokens = payload.Usage.InputTokens
+					if payload.Usage.PromptTokens > finalPromptTokens {
+						finalPromptTokens = payload.Usage.PromptTokens
 					}
-					
-					completionTokens := payload.Usage.CompletionTokens
-					if completionTokens == 0 {
-						completionTokens = payload.Usage.OutputTokens
+					if payload.Usage.CompletionTokens > finalCompletionTokens {
+						finalCompletionTokens = payload.Usage.CompletionTokens
 					}
-
-					if promptTokens > 0 {
-						span.SetAttributes(attribute.Int("gen_ai.usage.prompt_tokens", promptTokens))
-						t.usageCounter.Add(ctx, int64(promptTokens), metric.WithAttributes(
-							attribute.String("gen_ai.system", provider),
-							attribute.String("gen_ai.request.model", modelName),
-							attribute.String("gen_ai.token.type", "prompt"),
-						))
+					if payload.Usage.InputTokens > finalPromptTokens {
+						finalPromptTokens = payload.Usage.InputTokens
 					}
-					if completionTokens > 0 {
-						span.SetAttributes(attribute.Int("gen_ai.usage.completion_tokens", completionTokens))
-						t.usageCounter.Add(ctx, int64(completionTokens), metric.WithAttributes(
-							attribute.String("gen_ai.system", provider),
-							attribute.String("gen_ai.request.model", modelName),
-							attribute.String("gen_ai.token.type", "completion"),
-						))
+					if payload.Usage.OutputTokens > finalCompletionTokens {
+						finalCompletionTokens = payload.Usage.OutputTokens
+					}
+					if payload.Message.Usage.InputTokens > finalPromptTokens {
+						finalPromptTokens = payload.Message.Usage.InputTokens
+					}
+					if payload.Message.Usage.OutputTokens > finalCompletionTokens {
+						finalCompletionTokens = payload.Message.Usage.OutputTokens
 					}
 				}
 			}
@@ -260,6 +261,23 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 		span.RecordError(err)
 		span.SetAttributes(attribute.String("error.type", errorType))
 		return fmt.Errorf("[TraceID: %s] error reading stream: %w", traceID, err)
+	}
+
+	if finalPromptTokens > 0 {
+		span.SetAttributes(attribute.Int("gen_ai.usage.prompt_tokens", finalPromptTokens))
+		t.usageCounter.Add(context.Background(), int64(finalPromptTokens), metric.WithAttributes(
+			attribute.String("gen_ai.system", provider),
+			attribute.String("gen_ai.request.model", modelName),
+			attribute.String("gen_ai.token.type", "prompt"),
+		))
+	}
+	if finalCompletionTokens > 0 {
+		span.SetAttributes(attribute.Int("gen_ai.usage.completion_tokens", finalCompletionTokens))
+		t.usageCounter.Add(context.Background(), int64(finalCompletionTokens), metric.WithAttributes(
+			attribute.String("gen_ai.system", provider),
+			attribute.String("gen_ai.request.model", modelName),
+			attribute.String("gen_ai.token.type", "completion"),
+		))
 	}
 
 	fmt.Printf("[Worker %d] [TraceID: %s] Completed request. Total bytes: %d\n", id, traceID, totalBytes)
