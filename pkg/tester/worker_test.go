@@ -24,9 +24,9 @@ func TestRunWorker_Success(t *testing.T) {
 	// 2. Setup mock SSE server
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
-		w.Write([]byte("data: {\"choices\": [{\"delta\": {\"content\": \"Hello\"}}]}\n\n"))
-		w.Write([]byte("data: {\"usage\": {\"prompt_tokens\": 42, \"completion_tokens\": 10}}\n\n"))
-		w.Write([]byte("data: [DONE]\n\n"))
+		_, _ = w.Write([]byte("data: {\"choices\": [{\"delta\": {\"content\": \"Hello\"}}]}\n\n"))
+		_, _ = w.Write([]byte("data: {\"usage\": {\"prompt_tokens\": 42, \"completion_tokens\": 10}}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
 	}))
 	defer ts.Close()
 
