@@ -158,8 +158,9 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		// Drain the body to prevent TCP connection Keep-Alive teardown
-		_, _ = io.Copy(io.Discard, resp.Body)
+		// Drain up to 16KB of the body to preserve Keep-Alive connections, 
+		// but use a LimitReader to protect against infinite garbage streams on 500 errors.
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 16384))
 		
 		errorType = fmt.Sprintf("%d", resp.StatusCode)
 		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
@@ -199,20 +200,24 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 			totalBytes += lineLen
 		}
 
-		if bytes.HasPrefix(lineBytes, []byte("data:")) {
-			if firstChunk && !bytes.Equal(lineBytes, []byte("data: [DONE]")) {
-				ttft = time.Since(dispatchTime)
-				firstChunk = false
-				
-				// record ttft metric in trace
-				span.SetAttributes(attribute.Float64("gen_ai.response.ttft_ms", float64(ttft.Milliseconds())))
-				// record ttft in histogram (must use Seconds to comply with OTel duration specs)
-				t.ttftHistogram.Record(context.Background(), ttft.Seconds(), metric.WithAttributes(
-					attribute.String("gen_ai.system", provider),
-					attribute.String("gen_ai.request.model", modelName),
-				))
-				fmt.Printf("[Worker %d] [TraceID: %s] TTFT: %v\n", id, traceID, ttft)
-			}
+		lineBytes = bytes.TrimSpace(lineBytes)
+		if len(lineBytes) == 0 {
+			continue
+		}
+
+		if firstChunk && bytes.HasPrefix(lineBytes, []byte("data:")) {
+			firstChunk = false
+			ttft = time.Since(dispatchTime)
+			
+			// record ttft metric in trace
+			span.SetAttributes(attribute.Float64("gen_ai.response.ttft_ms", float64(ttft.Milliseconds())))
+			// record ttft in histogram (must use Seconds to comply with OTel duration specs)
+			t.ttftHistogram.Record(context.Background(), ttft.Seconds(), metric.WithAttributes(
+				attribute.String("gen_ai.system", provider),
+				attribute.String("gen_ai.request.model", modelName),
+			))
+			fmt.Printf("[Worker %d] [TraceID: %s] TTFT: %v\n", id, traceID, ttft)
+		}
 			
 			// extract usage metrics if present (typically in the final chunk or message_start)
 			if bytes.Contains(lineBytes, []byte("\"usage\"")) {
@@ -252,7 +257,6 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 					}
 				}
 			}
-		}
 	}
 
 	if err := scanner.Err(); err != nil {
