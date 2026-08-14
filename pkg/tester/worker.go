@@ -66,6 +66,7 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 	var req *http.Request
 	var err error
 	var modelName string
+	var errorType string
 
 	if provider == "local" {
 		modelName = "dummy-model"
@@ -131,17 +132,24 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 	// Use context.Background() explicitly: ctx may be cancelled (e.g. SIGINT) by the
 	// time this defer runs, but we still want the final measurement recorded.
 	defer func() {
-		duration := time.Since(dispatchTime)
-		t.durationHistogram.Record(context.Background(), duration.Seconds(), metric.WithAttributes(
+		attrs := []attribute.KeyValue{
 			attribute.String("gen_ai.system", provider),
-		))
+			attribute.String("gen_ai.request.model", modelName),
+		}
+		if errorType != "" {
+			attrs = append(attrs, attribute.String("error.type", errorType))
+		}
+		
+		duration := time.Since(dispatchTime)
+		t.durationHistogram.Record(context.Background(), duration.Seconds(), metric.WithAttributes(attrs...))
 	}()
 
 	resp, err := t.client.Do(req)
 	if err != nil {
+		errorType = "network_error"
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
-		span.SetAttributes(attribute.String("error.type", "network_error"))
+		span.SetAttributes(attribute.String("error.type", errorType))
 		return fmt.Errorf("[TraceID: %s] http request failed: %w", traceID, err)
 	}
 	defer resp.Body.Close()
@@ -150,10 +158,11 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 		// Drain the body to prevent TCP connection Keep-Alive teardown
 		_, _ = io.Copy(io.Discard, resp.Body)
 		
+		errorType = fmt.Sprintf("%d", resp.StatusCode)
 		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
-		span.SetAttributes(attribute.String("error.type", fmt.Sprintf("%d", resp.StatusCode)))
+		span.SetAttributes(attribute.String("error.type", errorType))
 		return fmt.Errorf("[TraceID: %s] %w", traceID, err)
 	}
 
@@ -193,6 +202,7 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 				// record ttft in histogram (must use Seconds to comply with OTel duration specs)
 				t.ttftHistogram.Record(context.Background(), ttft.Seconds(), metric.WithAttributes(
 					attribute.String("gen_ai.system", provider),
+					attribute.String("gen_ai.request.model", modelName),
 				))
 				fmt.Printf("[Worker %d] [TraceID: %s] TTFT: %v\n", id, traceID, ttft)
 			}
@@ -224,6 +234,7 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 						span.SetAttributes(attribute.Int("gen_ai.usage.prompt_tokens", promptTokens))
 						t.usageCounter.Add(ctx, int64(promptTokens), metric.WithAttributes(
 							attribute.String("gen_ai.system", provider),
+							attribute.String("gen_ai.request.model", modelName),
 							attribute.String("gen_ai.token.type", "prompt"),
 						))
 					}
@@ -231,6 +242,7 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 						span.SetAttributes(attribute.Int("gen_ai.usage.completion_tokens", completionTokens))
 						t.usageCounter.Add(ctx, int64(completionTokens), metric.WithAttributes(
 							attribute.String("gen_ai.system", provider),
+							attribute.String("gen_ai.request.model", modelName),
 							attribute.String("gen_ai.token.type", "completion"),
 						))
 					}
@@ -240,9 +252,10 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 	}
 
 	if err := scanner.Err(); err != nil {
+		errorType = "stream_error"
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
-		span.SetAttributes(attribute.String("error.type", "stream_error"))
+		span.SetAttributes(attribute.String("error.type", errorType))
 		return fmt.Errorf("[TraceID: %s] error reading stream: %w", traceID, err)
 	}
 
