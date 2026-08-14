@@ -185,6 +185,8 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 	// Track maximum cumulative token counts to prevent double-counting across multiple SSE chunks
 	var finalPromptTokens int
 	var finalCompletionTokens int
+	var finalCacheReadTokens int
+	var finalCacheCreationTokens int
 
 	for scanner.Scan() {
 		lineBytes := scanner.Bytes() // zero-allocation byte slice
@@ -225,35 +227,64 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 					Usage struct {
 						PromptTokens     int `json:"prompt_tokens"`
 						CompletionTokens int `json:"completion_tokens"`
-						InputTokens      int `json:"input_tokens"`
-						OutputTokens     int `json:"output_tokens"`
+						PromptTokensDetails struct {
+							CachedTokens int `json:"cached_tokens"`
+						} `json:"prompt_tokens_details"`
+						InputTokens              int `json:"input_tokens"`
+						OutputTokens             int `json:"output_tokens"`
+						CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+						CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
 					} `json:"usage"`
 					Message struct {
 						Usage struct {
-							InputTokens  int `json:"input_tokens"`
-							OutputTokens int `json:"output_tokens"`
+							InputTokens              int `json:"input_tokens"`
+							OutputTokens             int `json:"output_tokens"`
+							CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+							CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
 						} `json:"usage"`
 					} `json:"message"`
 				}
 				jsonStr := bytes.TrimSpace(bytes.TrimPrefix(lineBytes, []byte("data:")))
 				if err := json.Unmarshal(jsonStr, &payload); err == nil {
+					// OpenAI Logic
 					if payload.Usage.PromptTokens > finalPromptTokens {
 						finalPromptTokens = payload.Usage.PromptTokens
 					}
 					if payload.Usage.CompletionTokens > finalCompletionTokens {
 						finalCompletionTokens = payload.Usage.CompletionTokens
 					}
-					if payload.Usage.InputTokens > finalPromptTokens {
-						finalPromptTokens = payload.Usage.InputTokens
+					if payload.Usage.PromptTokensDetails.CachedTokens > finalCacheReadTokens {
+						finalCacheReadTokens = payload.Usage.PromptTokensDetails.CachedTokens
+					}
+
+					// Anthropic Top-Level
+					anthropicTopPrompt := payload.Usage.InputTokens + payload.Usage.CacheReadInputTokens
+					if anthropicTopPrompt > finalPromptTokens {
+						finalPromptTokens = anthropicTopPrompt
 					}
 					if payload.Usage.OutputTokens > finalCompletionTokens {
 						finalCompletionTokens = payload.Usage.OutputTokens
 					}
-					if payload.Message.Usage.InputTokens > finalPromptTokens {
-						finalPromptTokens = payload.Message.Usage.InputTokens
+					if payload.Usage.CacheReadInputTokens > finalCacheReadTokens {
+						finalCacheReadTokens = payload.Usage.CacheReadInputTokens
+					}
+					if payload.Usage.CacheCreationInputTokens > finalCacheCreationTokens {
+						finalCacheCreationTokens = payload.Usage.CacheCreationInputTokens
+					}
+
+					// Anthropic Nested (message_start)
+					anthropicNestedPrompt := payload.Message.Usage.InputTokens + payload.Message.Usage.CacheReadInputTokens
+					if anthropicNestedPrompt > finalPromptTokens {
+						finalPromptTokens = anthropicNestedPrompt
 					}
 					if payload.Message.Usage.OutputTokens > finalCompletionTokens {
 						finalCompletionTokens = payload.Message.Usage.OutputTokens
+					}
+					if payload.Message.Usage.CacheReadInputTokens > finalCacheReadTokens {
+						finalCacheReadTokens = payload.Message.Usage.CacheReadInputTokens
+					}
+					if payload.Message.Usage.CacheCreationInputTokens > finalCacheCreationTokens {
+						finalCacheCreationTokens = payload.Message.Usage.CacheCreationInputTokens
 					}
 				}
 			}
@@ -282,6 +313,12 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 			attribute.String("gen_ai.request.model", modelName),
 			attribute.String("gen_ai.token.type", "completion"),
 		))
+	}
+	if finalCacheReadTokens > 0 {
+		span.SetAttributes(attribute.Int("gen_ai.usage.cache_read.input_tokens", finalCacheReadTokens))
+	}
+	if finalCacheCreationTokens > 0 {
+		span.SetAttributes(attribute.Int("gen_ai.usage.cache_creation.input_tokens", finalCacheCreationTokens))
 	}
 
 	fmt.Printf("[Worker %d] [TraceID: %s] Completed request. Total bytes: %d\n", id, traceID, totalBytes)
