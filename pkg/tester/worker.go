@@ -31,9 +31,9 @@ type Tester struct {
 
 func NewTester() *Tester {
 	meter := otel.Meter("llm-bench")
-	usageCounter, _ := meter.Int64Counter("gen_ai.client.token.usage")
-	durationHistogram, _ := meter.Float64Histogram("gen_ai.client.operation.duration")
-	ttftHistogram, _ := meter.Float64Histogram("gen_ai.client.token.time_to_first")
+	usageCounter, _ := meter.Int64Counter("gen_ai.client.token.usage", metric.WithUnit("{token}"))
+	durationHistogram, _ := meter.Float64Histogram("gen_ai.client.operation.duration", metric.WithUnit("s"))
+	ttftHistogram, _ := meter.Float64Histogram("gen_ai.client.token.time_to_first", metric.WithUnit("s"))
 
 	return &Tester{
 		client: &http.Client{
@@ -60,7 +60,8 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 		attribute.Bool("gen_ai.stream", true),
 	)
 
-	fmt.Printf("[Worker %d] Starting request to %s...\n", id, targetURL)
+	traceID := span.SpanContext().TraceID().String()
+	fmt.Printf("[Worker %d] [TraceID: %s] Starting request to %s...\n", id, traceID, targetURL)
 
 	var req *http.Request
 	var err error
@@ -111,11 +112,11 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 			req.Header.Set("anthropic-version", "2023-06-01")
 		}
 	} else {
-		return fmt.Errorf("unknown provider: %s", provider)
+		return fmt.Errorf("[TraceID: %s] unknown provider: %s", traceID, provider)
 	}
 
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("[TraceID: %s] failed to create request: %w", traceID, err)
 	}
 
 	// Propagate trace context into HTTP headers
@@ -132,7 +133,7 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 	// time this defer runs, but we still want the final measurement recorded.
 	defer func() {
 		duration := time.Since(dispatchTime)
-		t.durationHistogram.Record(context.Background(), float64(duration.Milliseconds()), metric.WithAttributes(
+		t.durationHistogram.Record(context.Background(), duration.Seconds(), metric.WithAttributes(
 			attribute.String("gen_ai.system", provider),
 		))
 	}()
@@ -142,7 +143,7 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
 		span.SetAttributes(attribute.String("error.type", "network_error"))
-		return fmt.Errorf("http request failed: %w", err)
+		return fmt.Errorf("[TraceID: %s] http request failed: %w", traceID, err)
 	}
 	defer resp.Body.Close()
 
@@ -154,7 +155,7 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
 		span.SetAttributes(attribute.String("error.type", fmt.Sprintf("%d", resp.StatusCode)))
-		return err
+		return fmt.Errorf("[TraceID: %s] %w", traceID, err)
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
@@ -190,11 +191,11 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 				
 				// record ttft metric in trace
 				span.SetAttributes(attribute.Float64("gen_ai.response.ttft_ms", float64(ttft.Milliseconds())))
-				// record ttft in histogram
-				t.ttftHistogram.Record(ctx, float64(ttft.Milliseconds()), metric.WithAttributes(
+				// record ttft in histogram (must use Seconds to comply with OTel duration specs)
+				t.ttftHistogram.Record(context.Background(), ttft.Seconds(), metric.WithAttributes(
 					attribute.String("gen_ai.system", provider),
 				))
-				fmt.Printf("[Worker %d] TTFT: %v\n", id, ttft)
+				fmt.Printf("[Worker %d] [TraceID: %s] TTFT: %v\n", id, traceID, ttft)
 			}
 			
 			// extract usage metrics if present (typically in the final chunk)
@@ -243,9 +244,9 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 		span.SetStatus(codes.Error, err.Error())
 		span.RecordError(err)
 		span.SetAttributes(attribute.String("error.type", "stream_error"))
-		return fmt.Errorf("error reading stream: %w", err)
+		return fmt.Errorf("[TraceID: %s] error reading stream: %w", traceID, err)
 	}
 
-	fmt.Printf("[Worker %d] Completed request. Total accumulated bytes: %d\n", id, totalBytes)
+	fmt.Printf("[Worker %d] [TraceID: %s] Completed request. Total bytes: %d\n", id, traceID, totalBytes)
 	return nil
 }
