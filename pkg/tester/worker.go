@@ -10,11 +10,11 @@ import (
 	"net/http"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -37,11 +37,11 @@ func NewTester() *Tester {
 
 	return &Tester{
 		client: &http.Client{
-			Transport: &http.Transport{
+			Transport: otelhttp.NewTransport(&http.Transport{
 				MaxIdleConns:          100,
 				MaxIdleConnsPerHost:   100,
 				ResponseHeaderTimeout: 10 * time.Second, // Protect against hung handshakes, but allow infinite stream duration
-			},
+			}),
 		},
 		tracer:            otel.Tracer("llm-bench"),
 		usageCounter:      usageCounter,
@@ -89,6 +89,7 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 		req, err = http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(bodyBytes))
 		if err == nil {
 			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "text/event-stream")
 			req.Header.Set("Authorization", "Bearer "+apiKey)
 		}
 	} else if provider == "anthropic" {
@@ -108,6 +109,7 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 		req, err = http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(bodyBytes))
 		if err == nil {
 			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "text/event-stream")
 			req.Header.Set("x-api-key", apiKey)
 			req.Header.Set("anthropic-version", "2023-06-01")
 		}
@@ -118,9 +120,6 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 	if err != nil {
 		return fmt.Errorf("[TraceID: %s] failed to create request: %w", traceID, err)
 	}
-
-	// Propagate trace context into HTTP headers
-	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
 
 	// Record dynamic model name
 	span.SetAttributes(attribute.String("gen_ai.request.model", modelName))

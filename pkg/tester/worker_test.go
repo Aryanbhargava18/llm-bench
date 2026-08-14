@@ -39,13 +39,21 @@ func TestRunWorker_Success(t *testing.T) {
 
 	// 4. Assert Spans
 	spans := exporter.GetSpans()
-	if len(spans) != 1 {
-		t.Fatalf("expected 1 span, got %d", len(spans))
+	if len(spans) < 1 {
+		t.Fatalf("expected at least 1 span, got %d", len(spans))
 	}
 
-	span := spans[0]
-	if span.Name != "llm.stream_request" {
-		t.Errorf("expected span name llm.stream_request, got %s", span.Name)
+	var span tracetest.SpanStub
+	var found bool
+	for _, s := range spans {
+		if s.Name == "llm.stream_request" {
+			span = s
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected to find span named llm.stream_request")
 	}
 
 	// 5. Assert Semantic Attributes
@@ -93,11 +101,23 @@ func TestRunWorker_ErrorMapping(t *testing.T) {
 	}
 
 	spans := exporter.GetSpans()
-	if len(spans) != 1 {
-		t.Fatalf("expected 1 span, got %d", len(spans))
+	if len(spans) < 1 {
+		t.Fatalf("expected at least 1 span, got %d", len(spans))
 	}
 
-	span := spans[0]
+	var span tracetest.SpanStub
+	var found bool
+	for _, s := range spans {
+		if s.Name == "llm.stream_request" {
+			span = s
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected to find span named llm.stream_request")
+	}
+
 	if span.Status.Code != codes.Error {
 		t.Errorf("expected span status Error, got %v", span.Status.Code)
 	}
