@@ -35,13 +35,16 @@ func NewTester() *Tester {
 	durationHistogram, _ := meter.Float64Histogram("gen_ai.client.operation.duration", metric.WithUnit("s"))
 	ttftHistogram, _ := meter.Float64Histogram("gen_ai.client.token.time_to_first", metric.WithUnit("s"))
 
+	// Properly clone DefaultTransport to preserve HTTP/2 multiplexing (ForceAttemptHTTP2: true)
+	// as well as crucial DialContext, TLSHandshakeTimeout, and IdleConnTimeout protections.
+	baseTransport := http.DefaultTransport.(*http.Transport).Clone()
+	baseTransport.MaxIdleConns = 100
+	baseTransport.MaxIdleConnsPerHost = 100
+	baseTransport.ResponseHeaderTimeout = 10 * time.Second // Protect against hung handshakes, but allow infinite stream duration
+
 	return &Tester{
 		client: &http.Client{
-			Transport: otelhttp.NewTransport(&http.Transport{
-				MaxIdleConns:          100,
-				MaxIdleConnsPerHost:   100,
-				ResponseHeaderTimeout: 10 * time.Second, // Protect against hung handshakes, but allow infinite stream duration
-			}),
+			Transport: otelhttp.NewTransport(baseTransport),
 		},
 		tracer:            otel.Tracer("llm-bench"),
 		usageCounter:      usageCounter,
