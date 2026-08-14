@@ -1,6 +1,6 @@
 module github.com/Aryanbhargava18/llm-bench
 
-go 1.26.5
+go 1.23
 
 require (
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0
