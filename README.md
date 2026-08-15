@@ -1,6 +1,6 @@
 # llm-bench
 
-A high-performance, concurrent CLI tool for benchmarking Server-Sent Events (SSE) streams from LLM providers like OpenAI and Anthropic.
+A concurrent CLI tool for load-testing Server-Sent Events (SSE) streams from LLM providers (OpenAI, Anthropic) and measuring observability correctness via OpenTelemetry.
 
 ## Why this exists
 
@@ -12,8 +12,8 @@ Benchmarking streaming LLM responses at high concurrency often leads to two prob
 
 ## Features
 
-- **High Concurrency HTTP:** Utilizes a custom `http.Transport` optimized for massive parallel connections.
-- **Zero-Copy Stream Parsing:** Never accumulates SSE content in memory. Tracks byte throughput with a running counter while parsing each line from the scanner's internal buffer, then discards it. Trailing usage frames are intercepted without holding any prior content in RAM.
+- **Connection Pooling:** Clones `http.DefaultTransport` and configures `MaxIdleConns`/`MaxIdleConnsPerHost` to prevent socket exhaustion under concurrent load while preserving HTTP/2 multiplexing and OS-level TLS defaults.
+- **Memory-Bounded Stream Parsing:** Tracks byte throughput via a running counter without accumulating SSE content in memory. Trailing usage frames are extracted from the scanner buffer line-by-line and discarded. This prevents OOM under concurrent load.
 - **Provider Agnostic:** Normalizes divergent usage schemas from OpenAI (`prompt_tokens`) and Anthropic (`input_tokens`).
 - **Native OpenTelemetry:** Emits OTel Traces and Metrics natively. Measures `gen_ai.response.ttft_ms` and `gen_ai.client.token.usage` using exact GenAI semantic conventions.
 - **Graceful Shutdown:** Native SIGINT listening ensures running workers and OpenTelemetry Providers gracefully flush telemetry on cancellation.
@@ -33,7 +33,7 @@ export OPENAI_API_KEY="sk-..."
 
 ## Testing Methodology
 
-`llm-bench` includes a robust test suite that utilizes `tracetest.InMemoryExporter` to mathematically assert the integrity of emitted OpenTelemetry spans and metrics.
+`llm-bench` includes a test suite using `tracetest.InMemoryExporter` to assert the structure and attribute values of emitted OpenTelemetry spans against expected `gen_ai.*` values.
 
 ```bash
 make test
