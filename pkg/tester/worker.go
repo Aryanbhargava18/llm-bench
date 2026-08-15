@@ -86,7 +86,8 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 				"include_usage": true,
 			},
 		}
-		bodyBytes, err := json.Marshal(payload)
+		var bodyBytes []byte
+		bodyBytes, err = json.Marshal(payload)
 		if err != nil {
 			return fmt.Errorf("failed to marshal openai request payload: %w", err)
 		}
@@ -104,9 +105,10 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 				{"role": "user", "content": "Say hello"},
 			},
 			"max_tokens": 1024,
-			"stream": true,
+			"stream":     true,
 		}
-		bodyBytes, err := json.Marshal(payload)
+		var bodyBytes []byte
+		bodyBytes, err = json.Marshal(payload)
 		if err != nil {
 			return fmt.Errorf("failed to marshal anthropic request payload: %w", err)
 		}
@@ -130,7 +132,7 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 
 	// Track dispatch time for operation duration and TTFT
 	dispatchTime := time.Now()
-	
+
 	// Ensure total operation duration is recorded correctly per OTel spec.
 	// Use context.Background() explicitly: ctx may be cancelled (e.g. SIGINT) by the
 	// time this defer runs, but we still want the final measurement recorded.
@@ -142,7 +144,7 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 		if errorType != "" {
 			attrs = append(attrs, attribute.String("error.type", errorType))
 		}
-		
+
 		duration := time.Since(dispatchTime)
 		t.durationHistogram.Record(context.Background(), duration.Seconds(), metric.WithAttributes(attrs...))
 	}()
@@ -158,10 +160,10 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		// Drain up to 16KB of the body to preserve Keep-Alive connections, 
+		// Drain up to 16KB of the body to preserve Keep-Alive connections,
 		// but use a LimitReader to protect against infinite garbage streams on 500 errors.
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 16384))
-		
+
 		errorType = fmt.Sprintf("%d", resp.StatusCode)
 		err := fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 		span.SetStatus(codes.Error, err.Error())
@@ -181,7 +183,7 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 	// Track byte count for throughput logging; never accumulate content in memory.
 	var totalBytes int
 	var truncated bool
-	
+
 	// Track maximum cumulative token counts to prevent double-counting across multiple SSE chunks
 	var finalPromptTokens int
 	var finalCompletionTokens int
@@ -191,13 +193,13 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 	for scanner.Scan() {
 		lineBytes := scanner.Bytes() // zero-allocation byte slice
 		lineLen := len(lineBytes)
-		
+
 		// enforce memory bounds for content, but continue scanning for trailing usage metrics
 		if !truncated && totalBytes+lineLen > maxResponseBodySize {
 			fmt.Printf("[Worker %d] stream exceeded %d bytes, truncating content accumulation\n", id, maxResponseBodySize)
 			truncated = true
 		}
-		
+
 		if !truncated {
 			totalBytes += lineLen
 		}
@@ -210,7 +212,7 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 		if firstChunk && bytes.HasPrefix(lineBytes, []byte("data:")) {
 			firstChunk = false
 			ttft = time.Since(dispatchTime)
-			
+
 			// record ttft metric in trace
 			span.SetAttributes(attribute.Float64("gen_ai.response.ttft_ms", float64(ttft.Milliseconds())))
 			// record ttft in histogram (must use Seconds to comply with OTel duration specs)
@@ -220,74 +222,74 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 			))
 			fmt.Printf("[Worker %d] [TraceID: %s] TTFT: %v\n", id, traceID, ttft)
 		}
-			
-			// extract usage metrics if present (typically in the final chunk or message_start)
-			if bytes.Contains(lineBytes, []byte("\"usage\"")) {
-				var payload struct {
+
+		// extract usage metrics if present (typically in the final chunk or message_start)
+		if bytes.Contains(lineBytes, []byte("\"usage\"")) {
+			var payload struct {
+				Usage struct {
+					PromptTokens        int `json:"prompt_tokens"`
+					CompletionTokens    int `json:"completion_tokens"`
+					PromptTokensDetails struct {
+						CachedTokens int `json:"cached_tokens"`
+					} `json:"prompt_tokens_details"`
+					InputTokens              int `json:"input_tokens"`
+					OutputTokens             int `json:"output_tokens"`
+					CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+					CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+				} `json:"usage"`
+				Message struct {
 					Usage struct {
-						PromptTokens     int `json:"prompt_tokens"`
-						CompletionTokens int `json:"completion_tokens"`
-						PromptTokensDetails struct {
-							CachedTokens int `json:"cached_tokens"`
-						} `json:"prompt_tokens_details"`
 						InputTokens              int `json:"input_tokens"`
 						OutputTokens             int `json:"output_tokens"`
 						CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 						CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
 					} `json:"usage"`
-					Message struct {
-						Usage struct {
-							InputTokens              int `json:"input_tokens"`
-							OutputTokens             int `json:"output_tokens"`
-							CacheReadInputTokens     int `json:"cache_read_input_tokens"`
-							CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
-						} `json:"usage"`
-					} `json:"message"`
+				} `json:"message"`
+			}
+			jsonStr := bytes.TrimSpace(bytes.TrimPrefix(lineBytes, []byte("data:")))
+			if err := json.Unmarshal(jsonStr, &payload); err == nil {
+				// OpenAI Logic
+				if payload.Usage.PromptTokens > finalPromptTokens {
+					finalPromptTokens = payload.Usage.PromptTokens
 				}
-				jsonStr := bytes.TrimSpace(bytes.TrimPrefix(lineBytes, []byte("data:")))
-				if err := json.Unmarshal(jsonStr, &payload); err == nil {
-					// OpenAI Logic
-					if payload.Usage.PromptTokens > finalPromptTokens {
-						finalPromptTokens = payload.Usage.PromptTokens
-					}
-					if payload.Usage.CompletionTokens > finalCompletionTokens {
-						finalCompletionTokens = payload.Usage.CompletionTokens
-					}
-					if payload.Usage.PromptTokensDetails.CachedTokens > finalCacheReadTokens {
-						finalCacheReadTokens = payload.Usage.PromptTokensDetails.CachedTokens
-					}
+				if payload.Usage.CompletionTokens > finalCompletionTokens {
+					finalCompletionTokens = payload.Usage.CompletionTokens
+				}
+				if payload.Usage.PromptTokensDetails.CachedTokens > finalCacheReadTokens {
+					finalCacheReadTokens = payload.Usage.PromptTokensDetails.CachedTokens
+				}
 
-					// Anthropic Top-Level
-					anthropicTopPrompt := payload.Usage.InputTokens + payload.Usage.CacheReadInputTokens
-					if anthropicTopPrompt > finalPromptTokens {
-						finalPromptTokens = anthropicTopPrompt
-					}
-					if payload.Usage.OutputTokens > finalCompletionTokens {
-						finalCompletionTokens = payload.Usage.OutputTokens
-					}
-					if payload.Usage.CacheReadInputTokens > finalCacheReadTokens {
-						finalCacheReadTokens = payload.Usage.CacheReadInputTokens
-					}
-					if payload.Usage.CacheCreationInputTokens > finalCacheCreationTokens {
-						finalCacheCreationTokens = payload.Usage.CacheCreationInputTokens
-					}
+				// Anthropic Top-Level
+				anthropicTopPrompt := payload.Usage.InputTokens + payload.Usage.CacheReadInputTokens
+				if anthropicTopPrompt > finalPromptTokens {
+					finalPromptTokens = anthropicTopPrompt
+				}
+				if payload.Usage.OutputTokens > finalCompletionTokens {
+					finalCompletionTokens = payload.Usage.OutputTokens
+				}
+				if payload.Usage.CacheReadInputTokens > finalCacheReadTokens {
+					finalCacheReadTokens = payload.Usage.CacheReadInputTokens
+				}
+				if payload.Usage.CacheCreationInputTokens > finalCacheCreationTokens {
+					finalCacheCreationTokens = payload.Usage.CacheCreationInputTokens
+				}
 
-					// Anthropic Nested (message_start)
-					anthropicNestedPrompt := payload.Message.Usage.InputTokens + payload.Message.Usage.CacheReadInputTokens
-					if anthropicNestedPrompt > finalPromptTokens {
-						finalPromptTokens = anthropicNestedPrompt
-					}
-					if payload.Message.Usage.OutputTokens > finalCompletionTokens {
-						finalCompletionTokens = payload.Message.Usage.OutputTokens
-					}
-					if payload.Message.Usage.CacheReadInputTokens > finalCacheReadTokens {
-						finalCacheReadTokens = payload.Message.Usage.CacheReadInputTokens
-					}
-					if payload.Message.Usage.CacheCreationInputTokens > finalCacheCreationTokens {
-						finalCacheCreationTokens = payload.Message.Usage.CacheCreationInputTokens
-					}
+				// Anthropic Nested (message_start)
+				anthropicNestedPrompt := payload.Message.Usage.InputTokens + payload.Message.Usage.CacheReadInputTokens
+				if anthropicNestedPrompt > finalPromptTokens {
+					finalPromptTokens = anthropicNestedPrompt
+				}
+				if payload.Message.Usage.OutputTokens > finalCompletionTokens {
+					finalCompletionTokens = payload.Message.Usage.OutputTokens
+				}
+				if payload.Message.Usage.CacheReadInputTokens > finalCacheReadTokens {
+					finalCacheReadTokens = payload.Message.Usage.CacheReadInputTokens
+				}
+				if payload.Message.Usage.CacheCreationInputTokens > finalCacheCreationTokens {
+					finalCacheCreationTokens = payload.Message.Usage.CacheCreationInputTokens
 				}
 			}
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
