@@ -128,3 +128,5 @@ func main() {
 	wg.Wait()
 	fmt.Println("done.")
 }
+
+// improve errors
