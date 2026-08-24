@@ -1,43 +1,129 @@
 # llm-bench
 
-A concurrent CLI tool for load-testing Server-Sent Events (SSE) streams from LLM providers (OpenAI, Anthropic) and measuring observability correctness via OpenTelemetry.
+A high-throughput, concurrent load-testing engine and telemetry validator for Server-Sent Events (SSE) streaming APIs across LLM providers (OpenAI, Anthropic, Gemini), with native OpenTelemetry distributed tracing and metrics validation.
 
-## Why this exists
+```text
+                                  +---------------------------------------+
+                                  |           llm-bench CLI               |
+                                  |   (--concurrency=50 --provider=openai)|
+                                  +-------------------+-------------------+
+                                                      |
+                                        [ Cloned http.Transport ]
+                                        (MaxIdleConnsPerHost=100)
+                                                      |
+                    +---------------------------------+---------------------------------+
+                    |                                 |                                 |
+                    v                                 v                                 v
+            +---------------+                 +---------------+                 +---------------+
+            |   Worker 1    |                 |   Worker 2    |                 |   Worker N    |
+            | (SSE Stream)  |                 | (SSE Stream)  |                 | (SSE Stream)  |
+            +-------+-------+                 +-------+-------+                 +-------+-------+
+                    |                                 |                                 |
+                    | Line-by-line Scan               | Line-by-line Scan               | Line-by-line Scan
+                    v                                 v                                 v
+          +-------------------+             +-------------------+             +-------------------+
+          | TTFT Calculation  |             | TTFT Calculation  |             | TTFT Calculation  |
+          | (1st Event Delta) |             | (1st Event Delta) |             | (1st Event Delta) |
+          +---------+---------+             +---------+---------+             +---------+---------+
+                    |                                 |                                 |
+                    | Running-Max Usage Extraction (Zero Buffer Accumulation)           |
+                    +---------------------------------+---------------------------------+
+                                                      |
+                                                      v
+                                      +-------------------------------+
+                                      |   OpenTelemetry SDK Exporter  |
+                                      |  * gen_ai.response.ttft_ms    |
+                                      |  * gen_ai.usage.prompt_tokens |
+                                      |  * gen_ai.usage.completion_tokens
+                                      +---------------+---------------+
+                                                      |
+                                                      v
+                                        [ OTLP / InMemoryExporter ]
+```
 
-Benchmarking streaming LLM responses at high concurrency often leads to two problems:
-1. **OOM Panics:** Blindly accumulating massive text streams in memory during concurrent load tests causes out-of-memory crashes.
-2. **Observability Blindspots:** Measuring Time-To-First-Token (TTFT) and token usage across hundreds of parallel streams is impossible without proper distributed tracing.
+---
 
-`llm-bench` solves this by introducing strict memory bounds (content truncation) during stream parsing, while seamlessly tracking operation durations, TTFT, and trailing usage metrics natively via OpenTelemetry.
+## Architectural Problem & Design
 
-## Features
+Load testing streaming LLM endpoints presents two foundational systems challenges that standard HTTP load generators (like `wrk` or `hey`) fail to handle:
 
-- **Connection Pooling:** Clones `http.DefaultTransport` and configures `MaxIdleConns`/`MaxIdleConnsPerHost` to prevent socket exhaustion under concurrent load while preserving HTTP/2 multiplexing and OS-level TLS defaults.
-- **Memory-Bounded Stream Parsing:** Tracks byte throughput via a running counter without accumulating SSE content in memory. Trailing usage frames are extracted from the scanner buffer line-by-line and discarded. This prevents OOM under concurrent load.
-- **Provider Agnostic:** Normalizes divergent usage schemas from OpenAI (`prompt_tokens`) and Anthropic (`input_tokens`).
-- **Native OpenTelemetry:** Emits OTel Traces and Metrics natively. Measures `gen_ai.response.ttft_ms` and `gen_ai.client.token.usage` using exact GenAI semantic conventions.
-- **Graceful Shutdown:** Native SIGINT listening ensures running workers and OpenTelemetry Providers gracefully flush telemetry on cancellation.
+1. **Unbounded SSE Buffer Allocation (OOM Panics):** Accumulating streaming chunk deltas into memory buffers under high concurrency causes memory consumption to scale linearly with stream duration and response length ($O(N \times L)$). `llm-bench` implements a line-by-line stream scanner that measures total byte throughput via running counters while extracting trailing usage metadata without in-memory text concatenation ($O(1)$ memory per worker).
+2. **Observability Verification:** Verifying that instrumentation accurately captures Time-To-First-Token (TTFT) and normalizes divergent provider schemas (e.g. Anthropic's split `message_start` vs OpenAI's trailing `usage` chunk) requires native OTel span and metric validation.
 
-## Usage
+---
+
+## Architecture & Mechanics
+
+* **Connection Pool Tuning:** Clones `http.DefaultTransport` and explicitly tunes `MaxIdleConns` and `MaxIdleConnsPerHost` to prevent TCP socket exhaustion and ephemeral port starvation while maintaining HTTP/2 multiplexing.
+* **Running-Max Usage Accumulator:** Prevents token double-counting across multi-frame SSE streams by taking monotonic maximums across cumulative frame updates.
+* **Provider Schema Normalization:**
+  * **OpenAI:** Extracts `usage.prompt_tokens` and `usage.completion_tokens` from final chunk frames.
+  * **Anthropic:** Normalizes nested `message.usage.input_tokens` from `message_start` events and top-level `usage` from `message_delta` events, folding `cache_read_input_tokens` into total prompt accounting.
+* **Native OpenTelemetry Instrumentation:** Every worker execution is wrapped in a root trace span exporting exact semantic convention attributes:
+  * `gen_ai.system` (`openai` | `anthropic` | `local`)
+  * `gen_ai.request.model`
+  * `gen_ai.response.ttft_ms`
+  * `gen_ai.usage.prompt_tokens`
+  * `gen_ai.usage.completion_tokens`
+  * `error.type` (HTTP status code or transport error)
+
+---
+
+## CLI Reference
+
+### Flags
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--provider` | string | `local` | Target LLM provider (`openai`, `anthropic`, `local`) |
+| `--concurrency` | int | `5` | Number of parallel worker goroutines |
+| `--endpoint` | string | `""` | Custom API base URL (defaults to provider standard) |
+| `--model` | string | `""` | Model identifier (defaults: `gpt-4` / `claude-3-5-sonnet-20241022`) |
+
+### Usage Examples
 
 ```bash
+# Build binary
 make build
 
-# Run against a local mock SSE server
-./bin/llm-bench --provider=local --concurrency=5
+# 1. Benchmark local mock SSE server with 10 concurrent streams
+./bin/llm-bench --provider=local --concurrency=10
 
-# Run against real providers (requires API keys)
+# 2. Run against OpenAI with distributed trace export
 export OPENAI_API_KEY="sk-..."
-./bin/llm-bench --provider=openai --concurrency=10
+./bin/llm-bench --provider=openai --concurrency=20 --model=gpt-4o
+
+# 3. Run against Anthropic Claude streaming endpoint
+export ANTHROPIC_API_KEY="sk-ant-..."
+./bin/llm-bench --provider=anthropic --concurrency=15
 ```
 
-## Testing Methodology
+---
 
-`llm-bench` includes a test suite using `tracetest.InMemoryExporter` to assert the structure and attribute values of emitted OpenTelemetry spans against expected `gen_ai.*` values.
+## Sample Trace Output
+
+```text
+[Worker 1] [TraceID: 3775544a0eeabb94829baab52cdb48ce] Starting request to http://127.0.0.1:59757...
+[Worker 1] [TraceID: 3775544a0eeabb94829baab52cdb48ce] TTFT: 783.208µs
+[Worker 1] [TraceID: 3775544a0eeabb94829baab52cdb48ce] Completed request. Total bytes: 127
+[Worker 2] [TraceID: 8a9310c822eabf41029baab52cdb99fe] Starting request to http://127.0.0.1:59757...
+[Worker 2] [TraceID: 8a9310c822eabf41029baab52cdb99fe] TTFT: 812.140µs
+[Worker 2] [TraceID: 8a9310c822eabf41029baab52cdb99fe] Completed request. Total bytes: 127
+```
+
+---
+
+## Testing & Telemetry Verification
+
+The test suite validates semantic attribute compliance using `go.opentelemetry.io/otel/sdk/trace/tracetest.InMemoryExporter`. Tests spin up local HTTP/SSE servers, execute concurrent workers, and assert span names, status codes, and `gen_ai.*` key-value pairs.
 
 ```bash
-make test
+# Execute unit and telemetry compliance test suite
+go test -v -race ./...
 ```
 
-## Requirements
-- Go 1.21+
+---
+
+## License
+
+Apache 2.0
