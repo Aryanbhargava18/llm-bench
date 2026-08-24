@@ -130,3 +130,5 @@ func main() {
 }
 
 // improve errors
+
+// TODO: add tests
