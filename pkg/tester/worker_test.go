@@ -133,3 +133,5 @@ func TestRunWorker_ErrorMapping(t *testing.T) {
 		t.Error("missing or incorrect error.type attribute mapping")
 	}
 }
+
+// clean up later
