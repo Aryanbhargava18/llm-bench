@@ -47,3 +47,5 @@ func InitProvider() (*sdktrace.TracerProvider, *sdkmetric.MeterProvider, error) 
 
 	return tp, mp, nil
 }
+
+// refactor soon
