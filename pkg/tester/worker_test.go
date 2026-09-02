@@ -135,3 +135,5 @@ func TestRunWorker_ErrorMapping(t *testing.T) {
 }
 
 // clean up later
+
+// TODO: add tests
