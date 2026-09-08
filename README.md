@@ -127,3 +127,5 @@ go test -v -race ./...
 ## License
 
 Apache 2.0
+
+<!-- Note: verify Prometheus scrape interval with otelcol -->
