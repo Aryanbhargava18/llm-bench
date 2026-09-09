@@ -59,13 +59,14 @@ Load testing streaming LLM endpoints presents two foundational systems challenge
 * **Provider Schema Normalization:**
   * **OpenAI:** Extracts `usage.prompt_tokens` and `usage.completion_tokens` from final chunk frames.
   * **Anthropic:** Normalizes nested `message.usage.input_tokens` from `message_start` events and top-level `usage` from `message_delta` events, folding `cache_read_input_tokens` into total prompt accounting.
-* **Native OpenTelemetry Instrumentation:** Every worker execution is wrapped in a root trace span exporting exact semantic convention attributes:
+* **Native OpenTelemetry Instrumentation & Lifecycle:** Every worker execution is wrapped in a root trace span exporting exact semantic convention attributes:
   * `gen_ai.system` (`openai` | `anthropic` | `local`)
   * `gen_ai.request.model`
   * `gen_ai.response.ttft_ms`
   * `gen_ai.usage.prompt_tokens`
   * `gen_ai.usage.completion_tokens`
   * `error.type` (HTTP status code or transport error)
+* **Deterministic Provider Shutdown:** `pkg/telemetry.Shutdown` executes bounded-context flushes across both `TracerProvider` and `MeterProvider` readers, ensuring zero span/metric loss upon process termination.
 
 ---
 
@@ -127,5 +128,3 @@ go test -v -race ./...
 ## License
 
 Apache 2.0
-
-<!-- Note: verify Prometheus scrape interval with otelcol -->

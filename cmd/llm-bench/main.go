@@ -80,12 +80,9 @@ func main() {
 	defer func() {
 		shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancelShutdown()
-		_ = tp.Shutdown(shutdownCtx)
-	}()
-	defer func() {
-		shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancelShutdown()
-		_ = mp.Shutdown(shutdownCtx)
+		if err := telemetry.Shutdown(shutdownCtx, tp, mp); err != nil {
+			log.Printf("error shutting down otel providers: %v", err)
+		}
 	}()
 
 	targetURL := "http://localhost:8080/stream"
@@ -128,9 +125,3 @@ func main() {
 	wg.Wait()
 	fmt.Println("done.")
 }
-
-// improve errors
-
-// TODO: add tests
-
-// TODO: add tests
