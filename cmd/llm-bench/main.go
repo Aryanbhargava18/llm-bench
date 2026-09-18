@@ -104,6 +104,14 @@ func main() {
 		if apiKey == "" {
 			log.Fatal("ANTHROPIC_API_KEY environment variable is required for provider=anthropic")
 		}
+	} else if *provider == "gemini" {
+		targetURL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+		apiKey = os.Getenv("GEMINI_API_KEY")
+		if apiKey == "" {
+			log.Fatal("GEMINI_API_KEY environment variable is required for provider=gemini")
+		}
+	} else {
+		log.Fatalf("unsupported provider %q (must be local, openai, anthropic, or gemini)", *provider)
 	}
 
 	fmt.Printf("target: %s, concurrency: %d\n", targetURL, *concurrency)
