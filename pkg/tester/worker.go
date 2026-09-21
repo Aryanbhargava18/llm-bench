@@ -350,3 +350,5 @@ func (t *Tester) RunWorker(ctx context.Context, id int, provider string, targetU
 // MaxIdleConnsPerHost is aligned with MaxIdleConns to ensure zero connection throttling
 
 // TTFT histogram records time elapsed from request dispatch until the first token byte is received
+
+// Status code mapping sets error.type attribute to HTTP status string on non-200 responses
