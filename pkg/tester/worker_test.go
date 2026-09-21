@@ -223,3 +223,16 @@ func TestWorker_TracerNameConstant(t *testing.T) {
 	}
 }
 
+
+func TestWorker_ErrorStatusCodeMapping(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
+	}))
+	defer ts.Close()
+	testerObj := NewTester()
+	err := testerObj.RunWorker(context.Background(), 11, "local", ts.URL, "")
+	if err == nil {
+		t.Error("expected error for 503 response, got nil")
+	}
+}
+
