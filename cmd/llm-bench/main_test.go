@@ -1,0 +1,19 @@
+package main
+
+import (
+	"os/exec"
+	"strings"
+	"testing"
+)
+
+func TestCLI_UnsupportedProvider(t *testing.T) {
+	cmd := exec.Command("go", "run", ".", "-provider", "unknown_provider")
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("expected non-zero exit code for unsupported provider")
+	}
+	outStr := string(output)
+	if !strings.Contains(outStr, "unsupported provider") {
+		t.Errorf("expected error message to contain 'unsupported provider', got: %s", outStr)
+	}
+}
