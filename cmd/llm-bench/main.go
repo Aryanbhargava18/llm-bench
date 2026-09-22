@@ -70,6 +70,10 @@ func main() {
 	fail := flag.Bool("fail", false, "Simulate a 429 Too Many Requests error")
 	flag.Parse()
 
+	if *concurrency <= 0 {
+		log.Fatalf("concurrency must be greater than zero, got %d", *concurrency)
+	}
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
