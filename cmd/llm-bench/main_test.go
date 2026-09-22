@@ -17,3 +17,17 @@ func TestCLI_UnsupportedProvider(t *testing.T) {
 		t.Errorf("expected error message to contain 'unsupported provider', got: %s", outStr)
 	}
 }
+
+func TestCLI_InvalidConcurrency(t *testing.T) {
+	cmd := exec.Command("go", "run", ".", "-concurrency", "0")
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("expected non-zero exit code for concurrency <= 0")
+	}
+	outStr := string(output)
+	if !strings.Contains(outStr, "concurrency must be greater than zero") {
+		t.Errorf("expected error message about concurrency, got: %s", outStr)
+	}
+}
+
+
