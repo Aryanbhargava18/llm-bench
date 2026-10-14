@@ -236,3 +236,17 @@ func TestWorker_ErrorStatusCodeMapping(t *testing.T) {
 	}
 }
 
+
+func TestWorker_MultipleWorkersExecution(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer ts.Close()
+	testerObj := NewTester()
+	err := testerObj.RunWorker(context.Background(), 12, "local", ts.URL, "")
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
+
