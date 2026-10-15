@@ -44,6 +44,8 @@ func NewTester() *Tester {
 	baseTransport.MaxIdleConns = 100
 	baseTransport.MaxIdleConnsPerHost = 100
 	baseTransport.ResponseHeaderTimeout = 10 * time.Second // Protect against hung handshakes, but allow infinite stream duration
+	baseTransport.TLSHandshakeTimeout = 10 * time.Second
+	baseTransport.ExpectContinueTimeout = 1 * time.Second
 
 	return &Tester{
 		client: &http.Client{
