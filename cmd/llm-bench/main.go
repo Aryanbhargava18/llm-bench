@@ -137,5 +137,5 @@ func main() {
 	}
 
 	wg.Wait()
-	fmt.Println("done.")
+	fmt.Println("benchmark finished successfully.")
 }
