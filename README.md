@@ -76,7 +76,7 @@ Load testing streaming LLM endpoints presents two foundational systems challenge
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `--provider` | string | `local` | Target LLM provider (`openai`, `anthropic`, `local`) |
+| `--provider` | string | `local` | Target LLM provider (`openai`, `anthropic`, `gemini`, `local`) |
 | `--concurrency` | int | `5` | Number of parallel worker goroutines |
 | `--endpoint` | string | `""` | Custom API base URL (defaults to provider standard) |
 | `--model` | string | `""` | Model identifier (defaults: `gpt-4` / `claude-3-5-sonnet-20241022`) |
