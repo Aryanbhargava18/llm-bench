@@ -31,3 +31,12 @@ func TestCLI_InvalidConcurrency(t *testing.T) {
 }
 
 
+
+func TestCLI_HelpFlag(t *testing.T) {
+	cmd := exec.Command("go", "run", ".", "-h")
+	out, _ := cmd.CombinedOutput()
+	if !strings.Contains(string(out), "Usage") {
+		t.Errorf("expected usage output, got: %s", string(out))
+	}
+}
+
