@@ -250,3 +250,79 @@ func TestWorker_MultipleWorkersExecution(t *testing.T) {
 	}
 }
 
+
+
+func TestWorker_ContextCancelledEarly(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	testerObj := NewTester()
+	_ = testerObj.RunWorker(ctx, 100, "local", "http://127.0.0.1:9", "")
+}
+
+
+func TestWorker_CancelledContextTimeout(t *testing.T) {
+	testerObj := NewTester()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer cancel()
+	time.Sleep(2 * time.Millisecond)
+	_ = testerObj.RunWorker(ctx, 101, "local", "http://127.0.0.1:9", "")
+}
+
+
+func TestWorker_EmptyPayloadHandling(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer ts.Close()
+
+	testerObj := NewTester()
+	err := testerObj.RunWorker(context.Background(), 102, "local", ts.URL, "")
+	if err != nil {
+		t.Fatalf("unexpected error on empty stream: %v", err)
+	}
+}
+
+
+func TestWorker_InvalidHTTPUrl(t *testing.T) {
+	testerObj := NewTester()
+	err := testerObj.RunWorker(context.Background(), 103, "local", "http://invalid-hostname-that-does-not-exist.local", "")
+	if err == nil {
+		t.Fatal("expected error on invalid host, got nil")
+	}
+}
+
+
+func TestWorker_LargeChunkStream(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		for i := 0; i < 5; i++ {
+			_, _ = w.Write([]byte("data: {\"choices\": [{\"delta\": {\"content\": \"chunk payload text \"}}]}\\n\\n"))
+		}
+		_, _ = w.Write([]byte("data: [DONE]\\n\\n"))
+	}))
+	defer ts.Close()
+
+	testerObj := NewTester()
+	err := testerObj.RunWorker(context.Background(), 104, "local", ts.URL, "")
+	if err != nil {
+		t.Fatalf("RunWorker failed on multi-chunk stream: %v", err)
+	}
+}
+
+
+func TestWorker_HTTPLocalMethodVerification(t *testing.T) {
+	var capturedMethod string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedMethod = r.Method
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer ts.Close()
+
+	testerObj := NewTester()
+	_ = testerObj.RunWorker(context.Background(), 105, "local", ts.URL, "")
+	if capturedMethod != "GET" {
+		t.Errorf("expected HTTP GET request for local provider, got %s", capturedMethod)
+	}
+}
